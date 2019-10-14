@@ -20,7 +20,7 @@ class Geometry(object):
 
     :param list species: list of element symbols
     :param list coords: list of atomic coordinates in angstroms (as 3-tuples)
-    :param list lattice: list of lattice vectors (None for a moleucle)
+    :param list lattice: list of lattice vectors (None for a molecule)
 
     Iterating over a geometry yields 2-tuples of symbols and coordinates.
     ``len(geom)`` returns the number of atoms in a geometry. The class supports
@@ -36,10 +36,10 @@ class Geometry(object):
     def from_atoms(cls, atoms, lattice=None, unit=1.):
         """Alternative contructor.
 
-        :param list atoms: list of 2-tuples with an elemnt symbol and
+        :param list atoms: list of 2-tuples with an element symbol and
             a coordinate
-        :param float unit: value to multiple atomic coordiantes with
         :param list lattice: list of lattice vectors (None for a moleucle)
+        :param float unit: value to multiple atomic coordinates with
         """
         species = [sp for sp, _ in atoms]
         coords = [np.array(coord, dtype=float)*unit for _, coord in atoms]
