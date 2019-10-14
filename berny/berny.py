@@ -8,6 +8,7 @@ from itertools import chain
 import numpy as np
 from numpy import dot, eye
 from numpy.linalg import norm, matrix_power
+import scipy as sp
 
 from . import Math
 from .coords import InternalCoords
@@ -157,7 +158,7 @@ class Berny(Generator):
         proj = dot(B, B_inv)
         H_proj = proj.dot(s.H).dot(proj) + 1000*(eye(len(s.coords))-proj)
         if self.transition_state:
-            dq, dE, on_sphere = quadratic_search_ts(
+            dq, dE, on_sphere = quadratic_search_ts_basic(
                 dot(proj, s.interpolated.g), H_proj, s.trust, log=log
             )
         else:
@@ -262,6 +263,7 @@ def quadratic_step_min(g, H, trust, log=no_log):
     rfo = np.vstack((np.hstack((H, g[:, None])),
                      np.hstack((g, 0))[None, :]))
     D, V = np.linalg.eigh((rfo+rfo.T)/2)
+    # What's going on here? Discarding the last eigenvector and only using it for scaling?
     dq = V[:-1, 0]/V[-1, 0]
     l = D[0]
     if norm(dq) <= trust:
@@ -284,7 +286,41 @@ def quadratic_step_min(g, H, trust, log=no_log):
     return dq, dE, on_sphere
 
 
-def quadratic_search_ts(g, H, trust, log=no_log):
+def quadratic_search_ts_basic(g, H, trust, log=no_log):
+    ev = np.linalg.eigvalsh((H+H.T)/2)
+    rfo = np.vstack((np.hstack((H, g[:, None])),
+                     np.hstack((g, 0))[None, :]))
+    D, V = np.linalg.eigh((rfo+rfo.T)/2)
+    # Need to verify that this yields the second-lowest eigenvalue/eigenvector
+    dq = V[:-1, 1]/V[-1, 1]
+    l = D[1]
+    if norm(dq) <= trust:
+        log('Pure RFO step was performed:')
+        on_sphere = False
+    else:
+        # Is there any guarantee that this function will change sign between
+        # ev[0] and ev[1]?
+        def steplength(l):
+            return norm(np.linalg.solve(l*eye(H.shape[0])-H, g))-trust
+        root = sp.optimize.root_scalar(steplength, method="bisect",
+                                       bracket=(ev[0], ev[1]))
+        if not root.converged:
+            raise Math.FindrootException()
+        l = root.root
+        dq = np.linalg.solve(l*eye(H.shape[0])-H, g)
+        on_sphere = True
+        log('Minimization on sphere was performed:')
+    dE = dot(g, dq)+0.5*dq.dot(H).dot(dq)  # predicted energy change
+    log('* Trust radius: {:.2}'.format(trust))
+    log('* Number of negative eigenvalues: {}'.format((ev < 0).sum()))
+    log('* Lowest eigenvalue: {:.3}'.format(ev[0]))
+    log('* lambda: {:.3}'.format(l))
+    log('Quadratic step: RMS: {:.3}, max: {:.3}'.format(Math.rms(dq), max(abs(dq))))
+    log('* Predicted energy change: {:.3}'.format(dE))
+    return dq, dE, on_sphere
+
+
+def quadratic_search_ts_partition(g, H, trust, log=no_log):
     pass
 
 

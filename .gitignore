@@ -6,6 +6,7 @@
 /.pytest_cache/
 /.cache/
 /.tox/
+/.idea/
 /htmlcov/
 /pyproject.lock
 /setup.py
