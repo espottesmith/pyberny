@@ -8,7 +8,7 @@ from itertools import chain
 import numpy as np
 from numpy import dot, eye
 from numpy.linalg import norm, matrix_power
-from scipy.optimize import root_scalar
+from scipy.optimize import brute
 
 from . import Math
 from .coords import InternalCoords
@@ -158,7 +158,7 @@ class Berny(Generator):
         proj = dot(B, B_inv)
         H_proj = proj.dot(s.H).dot(proj) + 1000*(eye(len(s.coords))-proj)
         if self.transition_state:
-            dq, dE, on_sphere = quadratic_search_ts_basic(
+            dq, dE, on_sphere = quadratic_step_ts_basic(
                 dot(proj, s.interpolated.g), H_proj, s.trust, log=log
             )
         else:
@@ -297,14 +297,10 @@ def quadratic_step_ts_basic(g, H, trust, log=no_log):
         log('Pure RFO step was performed:')
         on_sphere = False
     else:
-        # Is there any guarantee that this function will change sign between
-        # ev[0] and ev[1]?
-        def steplength(l):
-            return norm(np.linalg.solve(l*eye(H.shape[0])-H, g))-trust
-        root = root_scalar(steplength, method="bisect", bracket=(ev[0], ev[1]))
-        if not root.converged:
-            raise Math.FindrootException()
-        l = root.root
+        def abs_steplength(l):
+            return abs(norm(np.linalg.solve(l*eye(H.shape[0])-H, g))-trust)
+        root = brute(abs_steplength, [(ev[0], ev[1])])
+        l = root[0]
         dq = np.linalg.solve(l*eye(H.shape[0])-H, g)
         on_sphere = True
         log('Minimization on sphere was performed:')
