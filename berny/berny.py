@@ -8,7 +8,7 @@ from itertools import chain
 import numpy as np
 from numpy import dot, eye
 from numpy.linalg import norm, matrix_power
-import scipy as sp
+from scipy.optimize import root_scalar
 
 from . import Math
 from .coords import InternalCoords
@@ -208,11 +208,12 @@ def update_hessian_ts(H, dq, dg, log=no_log):
     # delta(H)_bofill = phi delta(H)_SR1 + (1 - phi) delta(H)_PSB
     # phi = [(delta(g) - H_old delta(x))T delta(x)]^2/[|delta(g) - H_old delta(x)|^2 |delta(x)|^2]
     quad_err = dg - H.dot(dq)
-    qtq = dq.T.dot(dq)
+    qtq = dot(dq, dq)
 
-    phi = matrix_power(quad_err.T.dot(dq), 2) / (norm(quad_err)**2 * norm(dq)**2)
-    dH_SR1 = quad_err.dot(quad_err.T) / (quad_err.T.dot(dq))
-    dH_PSB = (quad_err.dot(dq.T) + dq.dot(quad_err.T)) / qtq - (dq.T.dot(quad_err).dot(dq).dot(dq.T)) / matrix_power(qtq, 2)
+    phi = dot(quad_err, dq) ** 2 / (norm(quad_err)**2 * norm(dq)**2)
+    dH_SR1 = (quad_err[None, :] * quad_err[:, None]) / (dot(dq, quad_err))
+    dH_PSB = ((quad_err[None, :] * dq[:, None]) + (dq[None, :] * quad_err[:, None])) / qtq - \
+             dot(dq, quad_err) * (dq[None, :] * dq[:, None]) / qtq ** 2
 
     dH = phi * dH_SR1 + (1 - phi) * dH_PSB
     log('Hessian update information:')
@@ -263,7 +264,6 @@ def quadratic_step_min(g, H, trust, log=no_log):
     rfo = np.vstack((np.hstack((H, g[:, None])),
                      np.hstack((g, 0))[None, :]))
     D, V = np.linalg.eigh((rfo+rfo.T)/2)
-    # What's going on here? Discarding the last eigenvector and only using it for scaling?
     dq = V[:-1, 0]/V[-1, 0]
     l = D[0]
     if norm(dq) <= trust:
@@ -286,12 +286,11 @@ def quadratic_step_min(g, H, trust, log=no_log):
     return dq, dE, on_sphere
 
 
-def quadratic_search_ts_basic(g, H, trust, log=no_log):
+def quadratic_step_ts_basic(g, H, trust, log=no_log):
     ev = np.linalg.eigvalsh((H+H.T)/2)
     rfo = np.vstack((np.hstack((H, g[:, None])),
                      np.hstack((g, 0))[None, :]))
     D, V = np.linalg.eigh((rfo+rfo.T)/2)
-    # Need to verify that this yields the second-lowest eigenvalue/eigenvector
     dq = V[:-1, 1]/V[-1, 1]
     l = D[1]
     if norm(dq) <= trust:
@@ -302,8 +301,7 @@ def quadratic_search_ts_basic(g, H, trust, log=no_log):
         # ev[0] and ev[1]?
         def steplength(l):
             return norm(np.linalg.solve(l*eye(H.shape[0])-H, g))-trust
-        root = sp.optimize.root_scalar(steplength, method="bisect",
-                                       bracket=(ev[0], ev[1]))
+        root = root_scalar(steplength, method="bisect", bracket=(ev[0], ev[1]))
         if not root.converged:
             raise Math.FindrootException()
         l = root.root
@@ -320,7 +318,7 @@ def quadratic_search_ts_basic(g, H, trust, log=no_log):
     return dq, dE, on_sphere
 
 
-def quadratic_search_ts_partition(g, H, trust, log=no_log):
+def quadratic_step_ts_partition(g, H, trust, log=no_log):
     pass
 
 
