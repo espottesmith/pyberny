@@ -186,6 +186,14 @@ class Berny(Generator):
         if self._debug:
             return vars(s).copy()
 
+    @property
+    def converged(self):
+        return self._converged
+
+    @property
+    def state(self):
+        return self._state
+
     def throw(self, *args, **kwargs):
         return Generator.close(self, *args, **kwargs)
 

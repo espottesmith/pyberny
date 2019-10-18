@@ -38,7 +38,7 @@ class Geometry(object):
 
         :param list atoms: list of 2-tuples with an element symbol and
             a coordinate
-        :param list lattice: list of lattice vectors (None for a moleucle)
+        :param list lattice: list of lattice vectors (None for a molecule)
         :param float unit: value to multiple atomic coordinates with
         """
         species = [sp for sp, _ in atoms]
