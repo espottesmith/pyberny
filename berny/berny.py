@@ -154,7 +154,7 @@ class Berny(Generator):
         else:
             s.interpolated = current
         if s.trust < 1e-6:
-            raise RuntimeError('The trust radius got too small, check forces?')
+            raise TrustRadiusException('The trust radius got too small; check forces?')
         proj = dot(B, B_inv)
         H_proj = proj.dot(s.H).dot(proj) + 1000*(eye(len(s.coords))-proj)
         if self.transition_state:
@@ -193,6 +193,10 @@ class Berny(Generator):
     @property
     def state(self):
         return self._state
+
+    @property
+    def maxsteps(self):
+        return self._maxsteps
 
     def throw(self, *args, **kwargs):
         return Generator.close(self, *args, **kwargs)
@@ -309,6 +313,9 @@ def quadratic_step_ts_basic(g, H, trust, log=no_log):
             return abs(norm(np.linalg.solve(l*eye(H.shape[0])-H, g))-trust)
         root = brute(abs_steplength, [(ev[0], ev[1])])
         l = root[0]
+        if l > 1e-5:
+            raise NoRootException("No root found between the first and second "
+                                  "eigenvalues; quadratic step failed.")
         dq = np.linalg.solve(l*eye(H.shape[0])-H, g)
         on_sphere = True
         log('Minimization on sphere was performed:')
@@ -354,3 +361,11 @@ def is_converged(forces, step, on_sphere, params, log=no_log):
     if all_matched:
         log('* All criteria matched', level=1)
     return all_matched
+
+
+class TrustRadiusException(Exception):
+    pass
+
+
+class NoRootException(Exception):
+    pass

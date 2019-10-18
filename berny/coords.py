@@ -358,7 +358,7 @@ class InternalCoords(object):
         thre = 1e-6
         # target = CartIter(q=q+dq)
         # prev = CartIter(geom.coords, q, dq)
-        for i in range(20):
+        for i in range(100):
             coords_new = geom.coords+B_inv.dot(dq).reshape(-1, 3)/angstrom
             dcart_rms = Math.rms(coords_new-geom.coords)
             geom.coords = coords_new
@@ -371,6 +371,7 @@ class InternalCoords(object):
             if i == 0:
                 keep_first = geom.copy(), q, dcart_rms, dq_rms
         else:
+            # Should there be an exception here?
             msg = 'Transformation did not converge in {} iterations'
             geom, q, dcart_rms, dq_rms = keep_first
         log(msg.format(i+1))
