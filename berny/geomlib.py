@@ -75,6 +75,20 @@ class Geometry(object):
         self.dump(fp, fmt)
         return fp.getvalue()
 
+    def as_dict(self):
+        geom_dict = {"@module": self.__class__.__module__,
+                     "@class": self.__class__.__name__,
+                     "species": self.species,
+                     "coords": self.coords,
+                     "lattice": self.lattice}
+        return geom_dict
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(d["species"],
+                   d["coords"],
+                   lattice=d.get("lattice", None))
+
     dumps = __format__
 
     def dump(self, f, fmt):

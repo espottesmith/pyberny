@@ -22,6 +22,8 @@ class InternalCoord(object):
             self.weak = sum(
                 not C[self.idx[i], self.idx[i+1]] for i in range(len(self.idx)-1)
             )
+        else:
+            self.weak = None
 
     def __eq__(self, other):
         self.idx == other.idx
@@ -60,6 +62,22 @@ class Bond(InternalCoord):
         if not grad:
             return r
         return r, [v/r, -v/r]
+
+    def as_dict(self):
+        bond_dict = {"@module": self.__class__.__module__,
+                     "@class": self.__class__.__name__,
+                     "i": self.i,
+                     "j": self.j,
+                     "idx": self.idx,
+                     "weak": self.weak}
+        return bond_dict
+
+    @classmethod
+    def from_dict(cls, d):
+        bond = cls(d["i"], d["j"])
+        if d["weak"] is not None:
+            bond.weak = d["weak"]
+        return bond
 
 
 class Angle(InternalCoord):
@@ -108,6 +126,23 @@ class Angle(InternalCoord):
                 1/np.tan(phi)*v2/norm(v2)**2-v1/(norm(v1)*norm(v2)*np.sin(phi))
             ]
         return phi, grad
+
+    def as_dict(self):
+        angle_dict = {"@module": self.__class__.__module__,
+                      "@class": self.__class__.__name__,
+                      "i": self.i,
+                      "j": self.j,
+                      "k": self.k,
+                      "idx": self.idx,
+                      "weak": self.weak}
+        return angle_dict
+
+    @classmethod
+    def from_dict(cls, d):
+        angle = cls(d["i"], d["j"], d["k"])
+        if d["weak"] is not None:
+            angle.weak = d["weak"]
+        return angle
 
 
 class Dihedral(InternalCoord):
@@ -188,6 +223,24 @@ class Dihedral(InternalCoord):
             ]
         return phi, grad
 
+    def as_dict(self):
+        dihedral_dict = {"@module": self.__class__.__module__,
+                         "@class": self.__class__.__name__,
+                         "i": self.i,
+                         "j": self.j,
+                         "k": self.k,
+                         "l": self.l
+                         "idx": self.idx,
+                         "weak": self.weak}
+        return dihedral_dict
+
+    @classmethod
+    def from_dict(cls, d):
+        dihedral = cls(d["i"], d["j"], d["k"], d["l"])
+        if d["weak"] is not None:
+            dihedral.weak = d["weak"]
+        return dihedral
+
 
 def get_clusters(C):
     nonassigned = list(range(len(C)))
@@ -208,17 +261,34 @@ def get_clusters(C):
 
 
 class InternalCoords(object):
-    def __init__(self, geom, allowed=None, dihedral=True, superweakdih=False):
-        self._coords = []
+    def __init__(self, coords, fragments):
+        self._coords = coords
+        self.bonds = list()
+        self.angles = list()
+        self.dihedrals = list()
+        for coord in self._coords:
+            if isinstance(coord, Bond):
+                self.bonds.append(coord)
+            elif isinstance(coord, Angle):
+                self.angles.append(coord)
+            elif isinstance(coord, Dihedral):
+                self.dihedrals.append(coord)
+        self.fragments = fragments
+
+    @classmethod
+    def from_geometry(cls, geom, dihedral=True, superweakdih=False):
         n = len(geom)
         geom = geom.supercell()
         dist = geom.dist(geom)
         radii = np.array([get_property(sp, 'covalent_radius') for sp in geom.species])
         bondmatrix = dist < 1.3*(radii[None, :]+radii[:, None])
-        self.fragments, C = get_clusters(bondmatrix)
+        fragments, C = get_clusters(bondmatrix)
         radii = np.array([get_property(sp, 'vdw_radius') for sp in geom.species])
         shift = 0.
         C_total = C.copy()
+
+        coords = list()
+        bonds = list()
         while not C_total.all():
             bondmatrix |= ~C_total & (dist < radii[None, :]+radii[:, None]+shift)
             C_total = get_clusters(bondmatrix)[1]
@@ -226,29 +296,32 @@ class InternalCoords(object):
         for i, j in combinations(range(len(geom)), 2):
             if bondmatrix[i, j]:
                 bond = Bond(i, j, C=C)
-                self.append(bond)
+                bonds.append(bond)
+                coords.append(bond)
         for j in range(len(geom)):
             for i, k in combinations(np.flatnonzero(bondmatrix[j, :]), 2):
                 ang = Angle(i, j, k, C=C)
                 if ang.eval(geom.coords) > pi/4:
-                    self.append(ang)
+                    coords.append(ang)
         if dihedral:
-            for bond in self.bonds:
-                self.extend(get_dihedrals(
-                    [bond.i, bond.j],
-                    geom.coords,
-                    bondmatrix,
-                    C,
-                    superweak=superweakdih,
-                ))
+            for bond in bonds:
+                cls.extend(coords,
+                           get_dihedrals([bond.i, bond.j],
+                                         geom.coords,
+                                         bondmatrix,
+                                         C,
+                                         superweak=superweakdih))
         if geom.lattice is not None:
-            self._reduce(n)
+            coords, fragments = cls._reduce(n, coords, fragments)
+
+        return cls(coords, fragments)
 
     def append(self, coord):
         self._coords.append(coord)
 
-    def extend(self, coords):
-        self._coords.extend(coords)
+    @staticmethod
+    def extend(coords, new_coords):
+        return coords.extend(new_coords)
 
     def __iter__(self):
         return self._coords.__iter__()
@@ -275,6 +348,23 @@ class InternalCoords(object):
             ('angles', self.angles),
             ('dihedrals', self.dihedrals)
         ])
+
+    def as_dict(self):
+        return {"@module": self.__class__.__module__,
+                "@class": self.__class__.__name__,
+                "bonds": [b.as_dict() for b in self.bonds],
+                "angles": [a.as_dict() for a in self.angles],
+                "dihedrals": [d.as_dict() for d in self.dihedrals],
+                "fragments": self.fragments}
+
+    @classmethod
+    def from_dict(cls, d):
+        bonds = [Bond.from_dict(b) for b in d["bonds"]]
+        angles = [Angle.from_dict(a) for a in d["angles"]]
+        dihedrals = [Dihedral.from_dict(dd) for dd in d["dihedrals"]]
+        fragments = d["fragments"]
+        coords = bonds + angles + dihedrals
+        return cls(coords, fragments)
 
     def __repr__(self):
         return "<InternalCoords '{}'>".format(', '.join(
@@ -320,18 +410,20 @@ class InternalCoords(object):
                 q[i] = 2*pi-q[i]
         return q
 
-    def _reduce(self, n):
+    @staticmethod
+    def _reduce(n, c, f):
         idxs = np.int64(np.floor(np.array(range(3**3*n))/n))
         idxs, i = np.divmod(idxs, 3)
         idxs, j = np.divmod(idxs, 3)
         k = idxs % 3
         ijk = np.vstack((i, j, k)).T-1
-        self._coords = [
-            coord for coord in self._coords
+        coords = [
+            coord for coord in c
             if np.all(np.isin(coord.center(ijk), [0, -1]))
         ]
-        idxs = set(i for coord in self._coords for i in coord.idx)
-        self.fragments = [frag for frag in self.fragments if set(frag) & idxs]
+        idxs = set(i for coord in coords for i in coord.idx)
+        fragments = [frag for frag in f if set(frag) & idxs]
+        return coords, fragments
 
     def hessian_guess(self, geom):
         geom = geom.supercell()
