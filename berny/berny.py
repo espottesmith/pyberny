@@ -47,6 +47,35 @@ defaults = {
 """
 
 
+Point = namedtuple('Point', 'q E g')
+
+
+class State(object):
+    """
+    Object holding the current state of the optimizer.
+
+    :param Geometry geom: current geometry
+    :param InternalCoords coords: current internal coordinates
+    :param float trust: current trust radius
+    :param np.ndarray hessian: current guess for the Hessian matrix
+    :param np.narray weights: current coordinate weights
+    :param Point future: coordinates for the next step in the optimization
+    :param dict params: optimization parameters at the current step
+    :param bool first: Is this the first step in the optimization
+    """
+
+    def __init__(self, geom, coords, trust, hessian, weights, future, params,
+                 first=True):
+        self.geom = geom
+        self.coords = coords
+        self.trust = trust,
+        self.H = hessian
+        self.weights = weights
+        self.future = future
+        self.params = params
+        self.first = first
+
+
 class Berny(Generator):
     """
     Generator that receives energy and gradients and yields the next geometry.
@@ -72,11 +101,6 @@ class Berny(Generator):
             debug = optimizer.send((energy, gradients))
     """
 
-    class State(object):
-        pass
-
-    Point = namedtuple('Point', 'q E g')
-
     def __init__(self, geom, log=None, debug=False, restart=None, maxsteps=100,
                  verbosity=None, transition_state=False, **params):
         self._log = log or Logger(verbosity=verbosity or 0)
@@ -84,25 +108,24 @@ class Berny(Generator):
         self._maxsteps = maxsteps
         self._converged = False
         self._n = 0
-        s = self._state = Berny.State()
+        params = dict(chain(defaults.items(), params.items()))
+        coords = InternalCoords(geom,
+            dihedral=params['dihedral'],
+            superweakdih=params['superweakdih'],
+        )
+        s = self._state = State(geom=geom, coords=coords, trust=params["trust"],
+                                hessian=coords.hessian_guess(geom),
+                                weights=coords.weights(geom),
+                                future=Point(coords.eval_geom(geom),
+                                             None, None),
+                                params=params,
+                                first=True)
         self.transition_state = transition_state
         if restart:
             vars(s).update(restart)
             return
-        s.geom = geom
-        s.params = dict(chain(defaults.items(), params.items()))
-        s.trust = s.params['trust']
-        s.coords = InternalCoords(
-            s.geom,
-            dihedral=s.params['dihedral'],
-            superweakdih=s.params['superweakdih'],
-        )
-        s.H = s.coords.hessian_guess(s.geom)
-        s.weights = s.coords.weights(s.geom)
         for line in str(s.coords).split('\n'):
             self._log(line)
-        s.future = Berny.Point(s.coords.eval_geom(s.geom), None, None)
-        s.first = True
 
     def __next__(self):
         assert self._n <= self._maxsteps
@@ -120,7 +143,7 @@ class Berny(Generator):
         log('Energy: {:.12}'.format(energy), level=1)
         B = s.coords.B_matrix(s.geom)
         B_inv = B.T.dot(Math.pinv(np.dot(B, B.T), log=log))
-        current = Berny.Point(
+        current = Point(
             s.future.q, energy, dot(B_inv.T, gradients.reshape(-1))
         )
         if not s.first:
@@ -148,7 +171,7 @@ class Berny(Generator):
                     current.E, s.best.E, dot(current.g, dq), dot(s.best.g, dq),
                     log=log
                 )
-                s.interpolated = Berny.Point(
+                s.interpolated = Point(
                     current.q+t*dq, E, t*s.best.g+(1-t)*current.g
                 )
         else:
@@ -165,7 +188,7 @@ class Berny(Generator):
             dq, dE, on_sphere = quadratic_step_min(
                 dot(proj, s.interpolated.g), H_proj, s.trust, log=log
             )
-        s.predicted = Berny.Point(s.interpolated.q+dq, s.interpolated.E+dE, None)
+        s.predicted = Point(s.interpolated.q+dq, s.interpolated.E+dE, None)
         dq = s.predicted.q-current.q
         log('Total step: RMS: {:.3}, max: {:.3}'.format(
             Math.rms(dq), max(abs(dq))
@@ -173,7 +196,7 @@ class Berny(Generator):
         q, s.geom = s.coords.update_geom(
             s.geom, current.q, s.predicted.q-current.q, B_inv, log=log
         )
-        s.future = Berny.Point(q, None, None)
+        s.future = Point(q, None, None)
         s.previous = current
         if s.first or current.E < s.best.E:
             s.best = current
