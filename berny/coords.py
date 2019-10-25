@@ -229,7 +229,7 @@ class Dihedral(InternalCoord):
                          "i": self.i,
                          "j": self.j,
                          "k": self.k,
-                         "l": self.l
+                         "l": self.l,
                          "idx": self.idx,
                          "weak": self.weak}
         return dihedral_dict
