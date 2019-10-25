@@ -68,7 +68,7 @@ class State(object):
                  first=True):
         self.geom = geom
         self.coords = coords
-        self.trust = trust,
+        self.trust = trust
         self.H = hessian
         self.weights = weights
         self.future = future
@@ -120,6 +120,7 @@ class Berny(Generator):
                                              None, None),
                                 params=params,
                                 first=True)
+
         self.transition_state = transition_state
         if restart:
             vars(s).update(restart)
