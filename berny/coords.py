@@ -23,7 +23,7 @@ class InternalCoord(object):
                 not C[self.idx[i], self.idx[i+1]] for i in range(len(self.idx)-1)
             )
         else:
-            self.weak = None
+            self.weak = 0
 
     def __eq__(self, other):
         self.idx == other.idx
@@ -146,7 +146,7 @@ class Angle(InternalCoord):
 
 
 class Dihedral(InternalCoord):
-    def __init__(self, i, j, k, l, weak=None, angles=None, C=None, **kwargs):
+    def __init__(self, i, j, k, l, weak=0, angles=None, C=None, **kwargs):
         if j > k:
             i, j, k, l = l, k, j, i
         self.i = i
@@ -154,8 +154,8 @@ class Dihedral(InternalCoord):
         self.k = k
         self.l = l
         self.idx = (i, j, k, l)
-        self.weak = weak
         self.angles = angles
+        self.weak = weak
         InternalCoord.__init__(self, **kwargs)
 
     def hessian(self, rho):
@@ -263,16 +263,6 @@ def get_clusters(C):
 class InternalCoords(object):
     def __init__(self, coords, fragments):
         self._coords = coords
-        self.bonds = list()
-        self.angles = list()
-        self.dihedrals = list()
-        for coord in self._coords:
-            if isinstance(coord, Bond):
-                self.bonds.append(coord)
-            elif isinstance(coord, Angle):
-                self.angles.append(coord)
-            elif isinstance(coord, Dihedral):
-                self.dihedrals.append(coord)
         self.fragments = fragments
 
     @classmethod

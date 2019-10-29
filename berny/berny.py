@@ -11,6 +11,7 @@ from numpy.linalg import norm, matrix_power
 from scipy.optimize import brute
 
 from . import Math
+from .geomlib import Geometry
 from .coords import InternalCoords
 from .Logger import Logger
 
@@ -75,6 +76,25 @@ class State(object):
         self.params = params
         self.first = first
 
+    def as_dict(self):
+        d = {"geom": self.geom.as_dict(),
+             "coords": self.coords.as_dict(),
+             "trust": self.trust,
+             "hessian": self.H,
+             "weights": self.weights,
+             "future": self.future,
+             "params": self.params,
+             "first": self.first}
+        return d
+
+    @classmethod
+    def from_dict(cls, d):
+        geom = Geometry.from_dict(d["geom"])
+        coords = InternalCoords.from_dict(d["coords"])
+
+        return cls(geom, coords, d["trust"], d["hessian"], d["weights"],
+                   d["future"], d["params"], first=d["first"])
+
 
 class Berny(Generator):
     """
@@ -109,10 +129,9 @@ class Berny(Generator):
         self._converged = False
         self._n = 0
         params = dict(chain(defaults.items(), params.items()))
-        coords = InternalCoords(geom,
-            dihedral=params['dihedral'],
-            superweakdih=params['superweakdih'],
-        )
+        coords = InternalCoords.from_geometry(geom,
+                                              dihedral=params['dihedral'],
+                                              superweakdih=params['superweakdih'])
         s = self._state = State(geom=geom, coords=coords, trust=params["trust"],
                                 hessian=coords.hessian_guess(geom),
                                 weights=coords.weights(geom),
@@ -353,8 +372,37 @@ def quadratic_step_ts_basic(g, H, trust, log=no_log):
     return dq, dE, on_sphere
 
 
-def quadratic_step_ts_partition(g, H, trust, log=no_log):
-    pass
+# def quadratic_step_ts_partition(g, H, trust, log=no_log):
+#     ev = np.linalg.eigvalsh((H+H.T)/2)
+#     rfo = np.vstack((np.hstack((H, g[:, None])),
+#                      np.hstack((g, 0))[None, :]))
+#     D, V = np.linalg.eigh((rfo+rfo.T)/2)
+#     dq = V[:-1, 1]/V[-1, 1]
+#     l = D[1]
+#     if norm(dq) <= trust:
+#         log('Pure RFO step was performed:')
+#         on_sphere = False
+#      else:
+#          F =
+#
+#         def abs_steplength(l):
+#             return abs(norm(np.linalg.solve(l*eye(H.shape[0])-H, g))-trust)
+#         root = brute(abs_steplength, [(ev[0], ev[1])])
+#         l = root[0]
+#         if l > 1e-5:
+#             raise NoRootException("No root found between the first and second "
+#                                   "eigenvalues; quadratic step failed.")
+#         dq = np.linalg.solve(l*eye(H.shape[0])-H, g)
+#         on_sphere = True
+#         log('Minimization on sphere was performed:')
+#     dE = dot(g, dq)+0.5*dq.dot(H).dot(dq)  # predicted energy change
+#     log('* Trust radius: {:.2}'.format(trust))
+#     log('* Number of negative eigenvalues: {}'.format((ev < 0).sum()))
+#     log('* Lowest eigenvalue: {:.3}'.format(ev[0]))
+#     log('* lambda: {:.3}'.format(l))
+#     log('Quadratic step: RMS: {:.3}, max: {:.3}'.format(Math.rms(dq), max(abs(dq))))
+#     log('* Predicted energy change: {:.3}'.format(dE))
+#     return dq, dE, on_sphere
 
 
 def is_converged(forces, step, on_sphere, params, log=no_log):
