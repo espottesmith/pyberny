@@ -372,37 +372,39 @@ def quadratic_step_ts_basic(g, H, trust, log=no_log):
     return dq, dE, on_sphere
 
 
-# def quadratic_step_ts_partition(g, H, trust, log=no_log):
-#     ev = np.linalg.eigvalsh((H+H.T)/2)
-#     rfo = np.vstack((np.hstack((H, g[:, None])),
-#                      np.hstack((g, 0))[None, :]))
-#     D, V = np.linalg.eigh((rfo+rfo.T)/2)
-#     dq = V[:-1, 1]/V[-1, 1]
-#     l = D[1]
-#     if norm(dq) <= trust:
-#         log('Pure RFO step was performed:')
-#         on_sphere = False
-#      else:
-#          F =
-#
-#         def abs_steplength(l):
-#             return abs(norm(np.linalg.solve(l*eye(H.shape[0])-H, g))-trust)
-#         root = brute(abs_steplength, [(ev[0], ev[1])])
-#         l = root[0]
-#         if l > 1e-5:
-#             raise NoRootException("No root found between the first and second "
-#                                   "eigenvalues; quadratic step failed.")
-#         dq = np.linalg.solve(l*eye(H.shape[0])-H, g)
-#         on_sphere = True
-#         log('Minimization on sphere was performed:')
-#     dE = dot(g, dq)+0.5*dq.dot(H).dot(dq)  # predicted energy change
-#     log('* Trust radius: {:.2}'.format(trust))
-#     log('* Number of negative eigenvalues: {}'.format((ev < 0).sum()))
-#     log('* Lowest eigenvalue: {:.3}'.format(ev[0]))
-#     log('* lambda: {:.3}'.format(l))
-#     log('Quadratic step: RMS: {:.3}, max: {:.3}'.format(Math.rms(dq), max(abs(dq))))
-#     log('* Predicted energy change: {:.3}'.format(dE))
-#     return dq, dE, on_sphere
+def quadratic_step_ts_partition(g, H, trust, log=no_log):
+    D, V = np.linalg.eigh((H+H.T)/2)
+
+    F = V.dot(g)
+
+    lp = (D[0] + np.sqrt(D[0]**2 + 4 * F[0])) / 2
+
+    mat_n = np.vstack((np.hstack((np.diag(D[1:]), F[1:, None])),
+                       np.hstack((F[1:], 0))[None, :]))
+
+    Dn, Vn = np.linalg.eigh(mat_n)
+    dq = Vn[:-1, 0]/Vn[-1, 0]
+    ln = Dn[0]
+    if norm(dq) <= trust:
+        log('Pure RFO step was performed:')
+        on_sphere = False
+     else:
+        def steplength(l):
+            return norm(np.linalg.solve(l*eye(H.shape[0])-H, g))-trust
+        ln = Math.findroot(steplength, D[0])  # minimization on sphere
+        # Need to think about this: what does this look like when we're only applying this to (n-1) dimensions
+        dq = np.linalg.solve(ln*eye(H.shape[0])-H, g)
+        on_sphere = True
+        log('Minimization on sphere was performed:')
+    dE = dot(g, dq)+0.5*dq.dot(H).dot(dq)  # predicted energy change
+    log('* Trust radius: {:.2}'.format(trust))
+    log('* Number of negative eigenvalues: {}'.format((D < 0).sum()))
+    log('* Lowest eigenvalue: {:.3}'.format(D[0]))
+    log('* Maximumation lambda: {:.3}'.format(lp))
+    log('* Minimization lambda: {:.3}'.format(ln))
+    log('Quadratic step: RMS: {:.3}, max: {:.3}'.format(Math.rms(dq), max(abs(dq))))
+    log('* Predicted energy change: {:.3}'.format(dE))
+    return dq, dE, on_sphere
 
 
 def is_converged(forces, step, on_sphere, params, log=no_log):
