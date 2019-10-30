@@ -7,8 +7,8 @@ from itertools import chain
 
 import numpy as np
 from numpy import dot, eye
-from numpy.linalg import norm, matrix_power
-from scipy.optimize import brute
+from numpy.linalg import norm
+from scipy.linalg import eigh
 
 from . import Math
 from .geomlib import Geometry
@@ -359,7 +359,7 @@ def quadratic_step_min(g, H, trust, log=no_log):
     ev = np.linalg.eigvalsh((H+H.T)/2)
     rfo = np.vstack((np.hstack((H, g[:, None])),
                      np.hstack((g, 0))[None, :]))
-    D, V = np.linalg.eigh((rfo+rfo.T)/2)
+    D, V = eigh((rfo+rfo.T)/2)
     dq = V[:-1, 0]/V[-1, 0]
     l = D[0]
     if norm(dq) <= trust:
@@ -384,31 +384,27 @@ def quadratic_step_min(g, H, trust, log=no_log):
 
 def quadratic_step_ts_partition(g, H, trust, log=no_log, epsilon_1=1e-4,
                                 epsilon_2=1e-5):
-    D, V = np.linalg.eigh((H+H.T)/2)
+    D, V = eigh((H+H.T)/2)
     F = V.dot(g)
-
-    # Right now we always maximize along the lowest eigenvector
-    # Is this a good idea?
-    trans_vec = V[0]
 
     # To find the eigenvalue for maximization
     mat_p = np.array([[0, F[0]],
                       [F[0], D[0]]])
-    Dp, Vp = np.linalg.eigh(mat_p)
+    Dp, Vp = eigh(mat_p)
     lp = Dp[-1]
     vp = Vp[-1]
 
     # To find eigenvalue for minimization
-    mat_n = np.vstack((np.hstack((0, F[1:, None])),
-                       np.hstack((F[1:], np.diag(D[1:])))[None, :]))
-    Dn, Vn = np.linalg.eigh(mat_n)
+    mat_n = np.vstack((np.hstack((0, F[1:]))[None, :],
+                       np.hstack((F[1:, None], np.diag(D[1:])))))
+    Dn, Vn = eigh(mat_n)
     ln = Dn[0]
     vn = Vn[0]
 
     # Determine initial step length
     dqp = vp[1]/vp[0]
     dqn = vn[1:]/vn[0]
-    dq = np.hstack(dqp, dqn)
+    dq = np.hstack([dqp, dqn])
 
     if norm(dq) <= trust:
         log('Pure P-RFO step was performed:')
@@ -424,15 +420,15 @@ def quadratic_step_ts_partition(g, H, trust, log=no_log, epsilon_1=1e-4,
             dn_dalpha = (dn_dalpha_n + dn_dalpha_p)
             alpha_old = alpha
             alpha += (trust * norm(dq) - norm(dq) ** 2)/dn_dalpha
-            Dp, Vp = np.linalg.eigh(mat_p, b=np.array([[1, 0], [0, alpha]]))
+            Dp, Vp = eigh(mat_p, b=np.array([[1, 0], [0, alpha]]))
             lp = Dp[-1]
             vp = Vp[-1]
-            Dn, Vn = np.linalg.eigh(mat_n, b=np.diag([0] + [alpha] * (F.shape[0] - 1)))
+            Dn, Vn = eigh(mat_n, b=np.diag([1] + [alpha] * (F.shape[0] - 1)))
             ln = Dn[0]
             vn = Vn[0]
             dqp = vp[1]/vp[0]
             dqn = vn[1:]/vn[0]
-            dq = np.hstack(dqp, dqn)
+            dq = np.hstack([dqp, dqn])
             if abs(norm(dq) - trust) <= epsilon_1 or abs(alpha - alpha_old) <= epsilon_2:
                 converged = True
                 break
