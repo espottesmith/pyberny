@@ -201,7 +201,7 @@ class Berny(Generator):
         proj = dot(B, B_inv)
         H_proj = proj.dot(s.H).dot(proj) + 1000*(eye(len(s.coords))-proj)
         if self.transition_state:
-            dq, dE, on_sphere = quadratic_step_ts_basic(
+            dq, dE, on_sphere = quadratic_step_ts_partition(
                 dot(proj, s.interpolated.g), H_proj, s.trust, log=log
             )
         else:
@@ -341,59 +341,59 @@ def quadratic_step_min(g, H, trust, log=no_log):
     return dq, dE, on_sphere
 
 
-def quadratic_step_ts_basic(g, H, trust, log=no_log):
-    ev = np.linalg.eigvalsh((H+H.T)/2)
-    rfo = np.vstack((np.hstack((H, g[:, None])),
-                     np.hstack((g, 0))[None, :]))
-    D, V = np.linalg.eigh((rfo+rfo.T)/2)
-    dq = V[:-1, 1]/V[-1, 1]
-    l = D[1]
-    if norm(dq) <= trust:
-        log('Pure RFO step was performed:')
-        on_sphere = False
-    else:
-        def abs_steplength(l):
-            return abs(norm(np.linalg.solve(l*eye(H.shape[0])-H, g))-trust)
-        root = brute(abs_steplength, [(ev[0], ev[1])])
-        l = root[0]
-        if l > 1e-5:
-            raise NoRootException("No root found between the first and second "
-                                  "eigenvalues; quadratic step failed.")
-        dq = np.linalg.solve(l*eye(H.shape[0])-H, g)
-        on_sphere = True
-        log('Minimization on sphere was performed:')
-    dE = dot(g, dq)+0.5*dq.dot(H).dot(dq)  # predicted energy change
-    log('* Trust radius: {:.2}'.format(trust))
-    log('* Number of negative eigenvalues: {}'.format((ev < 0).sum()))
-    log('* Lowest eigenvalue: {:.3}'.format(ev[0]))
-    log('* lambda: {:.3}'.format(l))
-    log('Quadratic step: RMS: {:.3}, max: {:.3}'.format(Math.rms(dq), max(abs(dq))))
-    log('* Predicted energy change: {:.3}'.format(dE))
-    return dq, dE, on_sphere
-
-
-def quadratic_step_ts_partition(g, H, trust, log=no_log):
+def quadratic_step_ts_partition(g, H, trust, log=no_log, epsilon_1=10**-4,
+                                epsilon_2=10**-5):
     D, V = np.linalg.eigh((H+H.T)/2)
-
     F = V.dot(g)
 
-    lp = (D[0] + np.sqrt(D[0]**2 + 4 * F[0])) / 2
+    # Right now we always maximize along the lowest eigenvector
+    # Is this a good idea?
+    trans_vec = V[0]
 
-    mat_n = np.vstack((np.hstack((np.diag(D[1:]), F[1:, None])),
-                       np.hstack((F[1:], 0))[None, :]))
+    # To find the eigenvalue for maximization
+    mat_p = np.array([[0, F[0]],
+                      [F[0], D[0]]])
+    Dp, Vp = np.linalg.eigh(mat_p)
+    lp = Dp[-1]
+    vp = Vp[-1]
 
+    # To find eigenvalue for minimization
+    mat_n = np.vstack((np.hstack((0, F[1:, None])),
+                       np.hstack((F[1:], np.diag(D[1:])))[None, :]))
     Dn, Vn = np.linalg.eigh(mat_n)
-    dq = Vn[:-1, 0]/Vn[-1, 0]
     ln = Dn[0]
+    vn = Vn[0]
+
+    # Determine initial step length
+    dqp = vp[1]/vp[0]
+    dqn = vn[1:]/vn[0]
+    dq = np.hstack(dqp, dqn)
+
     if norm(dq) <= trust:
-        log('Pure RFO step was performed:')
+        log('Pure P-RFO step was performed:')
         on_sphere = False
-     else:
-        def steplength(l):
-            return norm(np.linalg.solve(l*eye(H.shape[0])-H, g))-trust
-        ln = Math.findroot(steplength, D[0])  # minimization on sphere
-        # Need to think about this: what does this look like when we're only applying this to (n-1) dimensions
-        dq = np.linalg.solve(ln*eye(H.shape[0])-H, g)
+    else:
+        alpha = 1
+        for i in range(100):
+            # Calculate new alpha parameter according to Besalu & Bofill (1998)
+            dn_dalpha_p = (lp / (1 + dqp**2 * alpha)) * F[0] ** 2 / (D[0] - lp * alpha) ** 3
+            dn_dalpha_n = (ln / (1 + norm(dqn)**2 * alpha)) * sum(F[i] ** 2 /
+                                                                  (D[i] - lp * alpha) ** 3 for i in range(1, len(F)))
+            dn_dalpha = (dn_dalpha_n + dn_dalpha_p)
+            alpha_old = alpha
+            alpha += (trust * norm(dq) - norm(dq) ** 2)/dn_dalpha
+            Dp, Vp = np.linalg.eigh(mat_p, b=np.array([[1, 0], [0, alpha]]))
+            lp = Dp[-1]
+            vp = Vp[-1]
+            Dn, Vn = np.linalg.eigh(mat_n, b=np.diag([0] + [alpha] * (F.shape[0] - 1)))
+            ln = Dn[0]
+            vn = Vn[0]
+            dqp = vp[1]/vp[0]
+            dqn = vn[1:]/vn[0]
+            dq = np.hstack(dqp, dqn)
+            if abs(norm(dq) - trust) <= epsilon_1 or abs(alpha - alpha_old) <= epsilon_2:
+                break
+
         on_sphere = True
         log('Minimization on sphere was performed:')
     dE = dot(g, dq)+0.5*dq.dot(H).dot(dq)  # predicted energy change
