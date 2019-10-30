@@ -183,7 +183,6 @@ class Berny(Generator):
                 log=log
             )
             if self.transition_state:
-                # Should there be some alternate method used here?
                 s.interpolated = current
             else:
                 dq = s.best.q-current.q
@@ -341,8 +340,8 @@ def quadratic_step_min(g, H, trust, log=no_log):
     return dq, dE, on_sphere
 
 
-def quadratic_step_ts_partition(g, H, trust, log=no_log, epsilon_1=10**-4,
-                                epsilon_2=10**-5):
+def quadratic_step_ts_partition(g, H, trust, log=no_log, epsilon_1=1e-4,
+                                epsilon_2=1e-5):
     D, V = np.linalg.eigh((H+H.T)/2)
     F = V.dot(g)
 
@@ -374,6 +373,7 @@ def quadratic_step_ts_partition(g, H, trust, log=no_log, epsilon_1=10**-4,
         on_sphere = False
     else:
         alpha = 1
+        converged = False
         for i in range(100):
             # Calculate new alpha parameter according to Besalu & Bofill (1998)
             dn_dalpha_p = (lp / (1 + dqp**2 * alpha)) * F[0] ** 2 / (D[0] - lp * alpha) ** 3
@@ -392,10 +392,12 @@ def quadratic_step_ts_partition(g, H, trust, log=no_log, epsilon_1=10**-4,
             dqn = vn[1:]/vn[0]
             dq = np.hstack(dqp, dqn)
             if abs(norm(dq) - trust) <= epsilon_1 or abs(alpha - alpha_old) <= epsilon_2:
+                converged = True
                 break
-
         on_sphere = True
-        log('Minimization on sphere was performed:')
+        log('Optimization on sphere was performed:')
+        if not converged:
+            log('NOTE: Step size did not converge in 100 steps.')
     dE = dot(g, dq)+0.5*dq.dot(H).dot(dq)  # predicted energy change
     log('* Trust radius: {:.2}'.format(trust))
     log('* Number of negative eigenvalues: {}'.format((D < 0).sum()))
