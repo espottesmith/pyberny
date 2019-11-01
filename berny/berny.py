@@ -51,6 +51,10 @@ defaults = {
 Point = namedtuple('Point', 'q E g')
 
 
+def no_log(msg, **kwargs):
+    pass
+
+
 class State(object):
     """
     Object holding the current state of the optimizer.
@@ -153,6 +157,16 @@ class Berny(Generator):
             raise StopIteration
         self._n += 1
         return self._state.geom
+
+    def update_hessian_exact(self, g, H, log=no_log):
+        log = self._log
+        log.n = self._n
+        s = self._state
+        B = s.coords.B_matrix(s.geom)
+        B_inv = B.T.dot(Math.pinv(np.dot(B, B.T), log=log))
+        g = dot(B_inv.T, g.reshape(-1))
+        s.H = B_inv.T.dot(H - s.coords.K_matrix(s.geom, g)).dot(B_inv)
+        log("State Hessian updated from calculated exact Hessian")
 
     def send(self, energy_gradients):
         log = self._log
@@ -264,10 +278,6 @@ class Berny(Generator):
 
     def throw(self, *args, **kwargs):
         return Generator.close(self, *args, **kwargs)
-
-
-def no_log(msg, **kwargs):
-    pass
 
 
 def update_hessian_min(H, dq, dg, log=no_log):
