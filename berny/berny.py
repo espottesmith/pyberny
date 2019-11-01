@@ -67,10 +67,11 @@ class State(object):
     :param Point future: coordinates for the next step in the optimization
     :param dict params: optimization parameters at the current step
     :param bool first: Is this the first step in the optimization
+    :param Point previous: coordinates for the previous step in the optimization
     """
 
     def __init__(self, geom, coords, trust, hessian, weights, future, params,
-                 first=True):
+                 first=True, previous=None):
         self.geom = geom
         self.coords = coords
         self.trust = trust
@@ -79,6 +80,7 @@ class State(object):
         self.future = future
         self.params = params
         self.first = first
+        self.previous = previous
 
     def as_dict(self):
         d = {"geom": self.geom.as_dict(),
@@ -88,7 +90,8 @@ class State(object):
              "weights": self.weights,
              "future": self.future,
              "params": self.params,
-             "first": self.first}
+             "first": self.first,
+             "previous": self.previous}
         return d
 
     @classmethod
@@ -97,7 +100,7 @@ class State(object):
         coords = InternalCoords.from_dict(d["coords"])
 
         return cls(geom, coords, d["trust"], d["hessian"], d["weights"],
-                   d["future"], d["params"], first=d["first"])
+                   d["future"], d["params"], first=d["first"], previous=d["previous"])
 
 
 class Berny(Generator):
@@ -217,28 +220,29 @@ class Berny(Generator):
                 dot(proj, s.interpolated.g), H_proj, s.trust, log=log
             )
             old_trust = s.trust
-            s.trust = update_trust_ts(s.trust,
-                          current.E-s.previous.E,
-                          s.predicted.E-s.previous.E,
-                          log=log)
-            if s.trust < old_trust:
-                appropriate_trust = False
-                for i in range(100):
-                    dq, dE, on_sphere = quadratic_step_ts_partition(
-                        dot(proj, s.interpolated.g), H_proj, s.trust, log=log
-                    )
-                    old_trust = s.trust
-                    s.trust = update_trust_ts(s.trust,
-                                              current.E-s.previous.E,
-                                              s.predicted.E-s.previous.E,
-                                              log=log)
-                    if s.trust < 1e-6:
-                        raise TrustRadiusException('The trust radius got too small; check forces?')
-                    if s.trust >= old_trust:
-                        appropriate_trust = True
-                        break
-                if not appropriate_trust:
-                    raise TrustRadiusException('Appropriate trust radius could not be found.')
+            if not s.first:
+                s.trust = update_trust_ts(s.trust,
+                              current.E-s.previous.E,
+                              s.predicted.E-s.previous.E,
+                              log=log)
+                if s.trust < old_trust:
+                    appropriate_trust = False
+                    for i in range(100):
+                        dq, dE, on_sphere = quadratic_step_ts_partition(
+                            dot(proj, s.interpolated.g), H_proj, s.trust, log=log
+                        )
+                        old_trust = s.trust
+                        s.trust = update_trust_ts(s.trust,
+                                                  current.E-s.previous.E,
+                                                  s.predicted.E-s.previous.E,
+                                                  log=log)
+                        if s.trust < 1e-6:
+                            raise TrustRadiusException('The trust radius got too small; check forces?')
+                        if s.trust >= old_trust:
+                            appropriate_trust = True
+                            break
+                    if not appropriate_trust:
+                        raise TrustRadiusException('Appropriate trust radius could not be found.')
         else:
             dq, dE, on_sphere = quadratic_step_min(
                 dot(proj, s.interpolated.g), H_proj, s.trust, log=log
