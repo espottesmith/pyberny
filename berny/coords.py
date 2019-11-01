@@ -128,20 +128,20 @@ class Angle(InternalCoord):
             dot_product = 1
         phi = np.arccos(dot_product)
         if abs(phi) > pi-1e-6:
-            grad = [
+            gradient = [
                 (pi-phi)/(2*norm(v1)**2)*v1,
                 (1/norm(v1)-1/norm(v2))*(pi-phi)/(2*norm(v1))*v1,
                 (pi-phi)/(2*norm(v2)**2)*v2
             ]
         else:
-            grad = [
+            gradient = [
                 1/np.tan(phi)*v1/norm(v1)**2-v2/(norm(v1)*norm(v2)*np.sin(phi)),
                 (v1+v2)/(norm(v1)*norm(v2)*np.sin(phi)) -
                 1/np.tan(phi)*(v1/norm(v1)**2+v2/norm(v2)**2),
                 1/np.tan(phi)*v2/norm(v2)**2-v1/(norm(v1)*norm(v2)*np.sin(phi))
             ]
         if grad:
-            return phi, grad
+            return phi, gradient
         elif second:
             if phi > phi-1e6:
                 # Derivatives not well defined for linear angles
@@ -174,7 +174,7 @@ class Angle(InternalCoord):
                         val = sum([term_1, term_2, term_3, term_4, term_5]) / sinq
                         mat[ii, jj] = val
                         mat[jj, ii] = val
-            return mat
+            return phi, mat
 
         else:
             return phi
@@ -332,7 +332,7 @@ class Dihedral(InternalCoord):
                         val = sum(t)
                         mat[ii, jj] = val
                         mat[jj, ii] = val
-            return mat
+            return phi, mat
         else:
             return phi
 
