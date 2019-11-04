@@ -222,9 +222,9 @@ class Berny(Generator):
             old_trust = s.trust
             if not s.first:
                 s.trust = update_trust_ts(s.trust,
-                              current.E-s.previous.E,
-                              s.predicted.E-s.previous.E,
-                              log=log)
+                                          current.E-s.previous.E,
+                                          s.predicted.E-s.previous.E,
+                                          log=log)
                 if s.trust < old_trust:
                     appropriate_trust = False
                     for i in range(100):

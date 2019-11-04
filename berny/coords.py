@@ -145,7 +145,7 @@ class Angle(InternalCoord):
         elif second:
             if phi > phi-1e6:
                 # Derivatives not well defined for linear angles
-                return np.zeros((9,9))
+                return phi, np.zeros((9, 9))
 
             cosq = dot_product
             sinq = np.sqrt(1 - cosq**2)
@@ -280,14 +280,14 @@ class Dihedral(InternalCoord):
             lw = norm(w)
             v1xw = Math.cross(v1, w)
             v2xw = Math.cross(v2, w)
-            cospv1 = dot(v1, w)
+            cospv1 = dot(v1, w) / (l1 * lw)
             sinpv1 = np.sqrt(1 - cospv1 ** 2)
-            cospv2 = -1 * dot(v2, w)
+            cospv2 = -1 * dot(v2, w) / (l2 * lw)
             sinpv2 = np.sqrt(1 - cospv2 ** 2)
             mat = np.zeros((12, 12))
             if not (1e-6 < np.arccos(cospv1) < pi-1e-6) and \
                     (1e-6 < np.arccos(cospv2) < pi-1e-6):
-                return mat
+                return phi, mat
             comp_coords = np.hstack([coords[self.i], coords[self.j], coords[self.k], coords[self.l]])
             for ii, i_coord in enumerate(comp_coords):
                 for jj, j_coord in enumerate(comp_coords):
@@ -299,7 +299,7 @@ class Dihedral(InternalCoord):
                         ab = (ii // 3 == jj // 3)
                         i = ii % 3
                         j = jj % 3
-                        k = 3 - (i + j)
+                        k = (3 - (i + j)) - 1
                         t = list()
                         for s in [[ii, jj], [jj, ii]]:
                             v1j = v1[s[1] % 3]
