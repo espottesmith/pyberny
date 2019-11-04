@@ -192,13 +192,13 @@ class Berny(Generator):
                 s.H = update_hessian_min(
                     s.H, current.q-s.best.q, current.g-s.best.g, log=log
                 )
-                s.trust = update_trust_min(s.trust,
-                                           current.E-s.previous.E,
-                                           s.predicted.E-s.interpolated.E,
-                                           s.predicted.q-s.interpolated.q,
-                                           log=log)
-                if s.trust < 1e-6:
-                    raise TrustRadiusException('The trust radius got too small; check forces?')
+            s.trust = update_trust(s.trust,
+                                   current.E-s.previous.E,
+                                   s.predicted.E-s.interpolated.E,
+                                   s.predicted.q-s.interpolated.q,
+                                   log=log)
+            if s.trust < 1e-6:
+                raise TrustRadiusException('The trust radius got too small; check forces?')
             if self.transition_state:
                 s.interpolated = current
             else:
@@ -216,33 +216,9 @@ class Berny(Generator):
         H_proj = proj.dot(s.H).dot(proj) + 1000*(eye(len(s.coords))-proj)
 
         if self.transition_state:
-            dq, dE, on_sphere = quadratic_step_ts_partition(
+            dq, dE, on_sphere = quadratic_step_ts(
                 dot(proj, s.interpolated.g), H_proj, s.trust, log=log
             )
-            old_trust = s.trust
-            if not s.first:
-                s.trust = update_trust_ts(s.trust,
-                                          current.E-s.previous.E,
-                                          s.predicted.E-s.previous.E,
-                                          log=log)
-                if s.trust < old_trust:
-                    appropriate_trust = False
-                    for i in range(100):
-                        dq, dE, on_sphere = quadratic_step_ts_partition(
-                            dot(proj, s.interpolated.g), H_proj, s.trust, log=log
-                        )
-                        old_trust = s.trust
-                        s.trust = update_trust_ts(s.trust,
-                                                  current.E-s.previous.E,
-                                                  s.predicted.E-s.previous.E,
-                                                  log=log)
-                        if s.trust < 1e-6:
-                            raise TrustRadiusException('The trust radius got too small; check forces?')
-                        if s.trust >= old_trust:
-                            appropriate_trust = True
-                            break
-                    if not appropriate_trust:
-                        raise TrustRadiusException('Appropriate trust radius could not be found.')
         else:
             dq, dE, on_sphere = quadratic_step_min(
                 dot(proj, s.interpolated.g), H_proj, s.trust, log=log
@@ -311,7 +287,7 @@ def update_hessian_ts(H, dq, dg, log=no_log):
     return H + dH
 
 
-def update_trust_min(trust, dE, dE_predicted, dq, log=no_log):
+def update_trust(trust, dE, dE_predicted, dq, log=no_log):
     if dE != 0:
         r = dE/dE_predicted  # Fletcher's parameter
     else:
@@ -323,26 +299,6 @@ def update_trust_min(trust, dE, dE_predicted, dq, log=no_log):
         return 2*trust
     else:
         return trust
-
-
-def update_trust_ts(trust, dE, dE_predicted, log=no_log):
-    # Based on Simons et al. (1983)
-    r_min = 0.7
-    r_good = 0.85
-    alpha = 1.5
-
-    if dE != 0:
-        r = dE/dE_predicted  # Fletcher's parameter
-    else:
-        r = 1.
-
-    log("Trust update: Fletcher's parameter: {:.3}".format(r))
-    if r_min <= r <= r_good or 2 - r_good < r < 2 - r_min:
-        return trust
-    elif r_good <= r <= 2 - r_good:
-        return trust * alpha
-    if r < r_min or r > 2 - r_min:
-        return trust / alpha
 
 
 def linear_search(E0, E1, g0, g1, log=no_log):
@@ -396,8 +352,7 @@ def quadratic_step_min(g, H, trust, log=no_log):
     return dq, dE, on_sphere
 
 
-def quadratic_step_ts_partition(g, H, trust, log=no_log, epsilon_1=1e-4,
-                                epsilon_2=1e-5):
+def quadratic_step_ts(g, H, trust, log=no_log, epsilon_1=1e-4, epsilon_2=1e-5):
     D, V = eigh((H+H.T)/2)
     F = V.dot(g)
 
