@@ -6,6 +6,7 @@ from collections import namedtuple
 from itertools import chain
 
 import numpy as np
+from numpy.linalg import LinAlgError
 from numpy import dot, eye
 from numpy.linalg import norm
 from scipy.linalg import eigh
@@ -28,6 +29,7 @@ defaults = {
     'stepmax': 1.8e-3,
     'steprms': 1.2e-3,
     'trust': 0.3,
+    'min_trust': 1e-6,
     'dihedral': True,
     'superweakdih': False,
 }
@@ -100,7 +102,8 @@ class State(object):
         coords = InternalCoords.from_dict(d["coords"])
 
         return cls(geom, coords, d["trust"], d["hessian"], d["weights"],
-                   d["future"], d["params"], first=d["first"], previous=d["previous"])
+                   d["future"], d["params"], first=d["first"],
+                   previous=d["previous"])
 
 
 class Berny(Generator):
@@ -197,7 +200,7 @@ class Berny(Generator):
                                    s.predicted.E-s.interpolated.E,
                                    s.predicted.q-s.interpolated.q,
                                    log=log)
-            if s.trust < 1e-6:
+            if s.trust < s.params["min_trust"]:
                 raise TrustRadiusException('The trust radius got too small; check forces?')
             if self.transition_state:
                 s.interpolated = current
@@ -389,7 +392,10 @@ def quadratic_step_ts(g, H, trust, log=no_log, epsilon_1=1e-4, epsilon_2=1e-5):
             dn_dalpha = (dn_dalpha_n + dn_dalpha_p)
             alpha_old = alpha
             alpha += (trust * norm(dq) - norm(dq) ** 2)/dn_dalpha
-            Dp, Vp = eigh(mat_p, b=np.array([[1, 0], [0, alpha]]))
+            try:
+                Dp, Vp = eigh(mat_p, b=np.array([[1, 0], [0, alpha]]))
+            except LinAlgError:
+                break
             lp = Dp[-1]
             vp = Vp[-1]
             Dn, Vn = eigh(mat_n, b=np.diag([1] + [alpha] * (F.shape[0] - 1)))
