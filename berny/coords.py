@@ -20,13 +20,13 @@ class InternalCoord(object):
     def __init__(self, C=None):
         if C is not None:
             self.weak = sum(
-                not C[self.idx[i], self.idx[i+1]] for i in range(len(self.idx)-1)
+                not C[self.idx[i], self.idx[i + 1]] for i in range(len(self.idx) - 1)
             )
         else:
             self.weak = 0
 
     def __eq__(self, other):
-        self.idx == other.idx
+        return self.idx == other.idx
 
     def __hash__(self):
         return hash(self.idx)
@@ -57,10 +57,10 @@ class Bond(InternalCoord):
         return np.round(ijk[[self.i, self.j]].sum(0))
 
     def eval(self, coords, grad=False, second=False):
-        v = (coords[self.i]-coords[self.j])*angstrom
+        v = (coords[self.i] - coords[self.j]) * angstrom
         r = norm(v)
         if grad:
-            return r, [v/r, -v/r]
+            return r, [v / r, -v / r]
         elif second:
             mat = np.zeros((6, 6))
             comp_coords = np.hstack([coords[self.i], coords[self.j]])
@@ -108,37 +108,42 @@ class Angle(InternalCoord):
         InternalCoord.__init__(self, **kwargs)
 
     def hessian(self, rho):
-        return 0.15*(rho[self.i, self.j]*rho[self.j, self.k])
+        return 0.15 * (rho[self.i, self.j] * rho[self.j, self.k])
 
     def weight(self, rho, coords):
         f = 0.12
-        return np.sqrt(rho[self.i, self.j]*rho[self.j, self.k]) *\
-            (f+(1-f)*np.sin(self.eval(coords)))
+        return np.sqrt(rho[self.i, self.j] * rho[self.j, self.k]) * (
+                f + (1 - f) * np.sin(self.eval(coords))
+        )
 
     def center(self, ijk):
-        return np.round(2*ijk[self.j])
+        return np.round(2 * ijk[self.j])
 
     def eval(self, coords, grad=False, second=False):
-        v1 = (coords[self.i]-coords[self.j])*angstrom
-        v2 = (coords[self.k]-coords[self.j])*angstrom
-        dot_product = np.dot(v1, v2)/(norm(v1)*norm(v2))
+        v1 = (coords[self.i] - coords[self.j]) * angstrom
+        v2 = (coords[self.k] - coords[self.j]) * angstrom
+        dot_product = np.dot(v1, v2) / (norm(v1)*norm(v2))
         if dot_product < -1:
             dot_product = -1
         elif dot_product > 1:
             dot_product = 1
         phi = np.arccos(dot_product)
+        if not grad and not second:
+            return phi
         if abs(phi) > pi-1e-6:
             gradient = [
-                (pi-phi)/(2*norm(v1)**2)*v1,
-                (1/norm(v1)-1/norm(v2))*(pi-phi)/(2*norm(v1))*v1,
-                (pi-phi)/(2*norm(v2)**2)*v2
+                (pi - phi) / (2 * norm(v1) ** 2) * v1,
+                (1 / norm(v1) - 1 / norm(v2)) * (pi - phi) / (2 * norm(v1)) * v1,
+                (pi - phi) / (2 * norm(v2) ** 2) * v2
             ]
         else:
             gradient = [
-                1/np.tan(phi)*v1/norm(v1)**2-v2/(norm(v1)*norm(v2)*np.sin(phi)),
-                (v1+v2)/(norm(v1)*norm(v2)*np.sin(phi)) -
-                1/np.tan(phi)*(v1/norm(v1)**2+v2/norm(v2)**2),
-                1/np.tan(phi)*v2/norm(v2)**2-v1/(norm(v1)*norm(v2)*np.sin(phi))
+                1 / np.tan(phi) * v1 / norm(v1) ** 2
+                - v2 / (norm(v1) * norm(v2) * np.sin(phi)),
+                (v1 + v2) / (norm(v1) * norm(v2) * np.sin(phi))
+                - 1 / np.tan(phi) * (v1 / norm(v1) ** 2 + v2 / norm(v2) ** 2),
+                1 / np.tan(phi) * v2 / norm(v2) ** 2
+                - v1 / (norm(v1) * norm(v2) * np.sin(phi))
             ]
         if grad:
             return phi, gradient
@@ -176,10 +181,6 @@ class Angle(InternalCoord):
                         mat[jj, ii] = val
             return phi, mat
 
-        else:
-            return phi
-
-
     def as_dict(self):
         angle_dict = {"@module": self.__class__.__module__,
                       "@class": self.__class__.__name__,
@@ -212,66 +213,68 @@ class Dihedral(InternalCoord):
         InternalCoord.__init__(self, **kwargs)
 
     def hessian(self, rho):
-        return 0.005*rho[self.i, self.j]*rho[self.j, self.k]*rho[self.k, self.l]
+        return 0.005 * rho[self.i, self.j] * rho[self.j, self.k] * rho[self.k, self.l]
 
     def weight(self, rho, coords):
         f = 0.12
         th1 = Angle(self.i, self.j, self.k).eval(coords)
         th2 = Angle(self.j, self.k, self.l).eval(coords)
-        return (rho[self.i, self.j]*rho[self.j, self.k]*rho[self.k, self.l])**(1/3) * \
-            (f+(1-f)*np.sin(th1))*(f+(1-f)*np.sin(th2))
+        return ((rho[self.i, self.j] * rho[self.j, self.k] * rho[self.k, self.l]) ** (1 / 3)
+                * (f + (1 - f) * np.sin(th1))
+                * (f + (1 - f) * np.sin(th2))
+        )
 
     def center(self, ijk):
         return np.round(ijk[[self.j, self.k]].sum(0))
 
     def eval(self, coords, grad=False, second=False):
-        v1 = (coords[self.i]-coords[self.j])*angstrom
-        v2 = (coords[self.l]-coords[self.k])*angstrom
-        w = (coords[self.k]-coords[self.j])*angstrom
-        ew = w/norm(w)
-        a1 = v1-dot(v1, ew)*ew
-        a2 = v2-dot(v2, ew)*ew
+        v1 = (coords[self.i] - coords[self.j]) * angstrom
+        v2 = (coords[self.l] - coords[self.k]) * angstrom
+        w = (coords[self.k] - coords[self.j]) * angstrom
+        ew = w / norm(w)
+        a1 = v1 - dot(v1, ew) * ew
+        a2 = v2 - dot(v2, ew) * ew
         sgn = np.sign(np.linalg.det(np.array([v2, v1, w])))
         sgn = sgn or 1
-        dot_product = dot(a1, a2)/(norm(a1)*norm(a2))
+        dot_product = dot(a1, a2) / (norm(a1) * norm(a2))
         if dot_product < -1:
             dot_product = -1
         elif dot_product > 1:
             dot_product = 1
-        phi = np.arccos(dot_product)*sgn
+        phi = np.arccos(dot_product) * sgn
         if grad:
             if abs(phi) > pi-1e-6:
                 g = Math.cross(w, a1)
-                g = g/norm(g)
-                A = dot(v1, ew)/norm(w)
-                B = dot(v2, ew)/norm(w)
+                g = g / norm(g)
+                A = dot(v1, ew) / norm(w)
+                B = dot(v2, ew) / norm(w)
                 grad = [
-                    g/(norm(g)*norm(a1)),
-                    -((1-A)/norm(a1)-B/norm(a2))*g,
-                    -((1+B)/norm(a2)+A/norm(a1))*g,
-                    g/(norm(g)*norm(a2))
+                    g / (norm(g) * norm(a1)),
+                    -((1 - A) / norm(a1) - B / norm(a2)) * g,
+                    -((1 + B) / norm(a2) + A / norm(a1)) * g,
+                    g / (norm(g) * norm(a2))
                 ]
             elif abs(phi) < 1e-6:
                 g = Math.cross(w, a1)
                 g = g/norm(g)
-                A = dot(v1, ew)/norm(w)
-                B = dot(v2, ew)/norm(w)
+                A = dot(v1, ew) / norm(w)
+                B = dot(v2, ew) / norm(w)
                 grad = [
-                    g/(norm(g)*norm(a1)),
-                    -((1-A)/norm(a1)+B/norm(a2))*g,
-                    ((1+B)/norm(a2)-A/norm(a1))*g,
-                    -g/(norm(g)*norm(a2))
+                    g / (norm(g) * norm(a1)),
+                    -((1 - A) / norm(a1) + B / norm(a2)) * g,
+                    ((1+B) / norm(a2) - A / norm(a1)) * g,
+                    -g / (norm(g) * norm(a2))
                 ]
             else:
-                A = dot(v1, ew)/norm(w)
-                B = dot(v2, ew)/norm(w)
+                A = dot(v1, ew) / norm(w)
+                B = dot(v2, ew) / norm(w)
                 grad = [
-                    1/np.tan(phi)*a1/norm(a1)**2-a2/(norm(a1)*norm(a2)*np.sin(phi)),
-                    ((1-A)*a2-B*a1)/(norm(a1)*norm(a2)*np.sin(phi)) -
-                    1/np.tan(phi)*((1-A)*a1/norm(a1)**2-B*a2/norm(a2)**2),
-                    ((1+B)*a1+A*a2)/(norm(a1)*norm(a2)*np.sin(phi)) -
-                    1/np.tan(phi)*((1+B)*a2/norm(a2)**2+A*a1/norm(a1)**2),
-                    1/np.tan(phi)*a2/norm(a2)**2-a1/(norm(a1)*norm(a2)*np.sin(phi))
+                    1 / np.tan(phi) * a1 / norm(a1) ** 2 - a2 / (norm(a1) * norm(a2) * np.sin(phi)),
+                    ((1 - A) * a2 - B * a1) / (norm(a1) * norm(a2) * np.sin(phi)) -
+                    1 / np.tan(phi) * ((1 - A) * a1 / norm(a1) ** 2 - B * a2 / norm(a2) ** 2),
+                    ((1 + B) * a1 + A * a2) / (norm(a1) * norm(a2) * np.sin(phi)) -
+                    1 / np.tan(phi) * ((1 + B) * a2 / norm(a2) ** 2 + A * a1 / norm(a1) ** 2),
+                    1 / np.tan(phi) * a2 / norm(a2) ** 2 - a1 / (norm(a1) * norm(a2) * np.sin(phi))
                 ]
             return phi, grad
         elif second:
@@ -359,7 +362,7 @@ def get_clusters(C):
     nonassigned = list(range(len(C)))
     clusters = []
     while nonassigned:
-        queue = set([nonassigned[0]])
+        queue = {nonassigned[0]}
         clusters.append([])
         while queue:
             node = queue.pop()
@@ -384,10 +387,10 @@ class InternalCoords(object):
         geom = geom.supercell()
         dist = geom.dist(geom)
         radii = np.array([get_property(sp, 'covalent_radius') for sp in geom.species])
-        bondmatrix = dist < 1.3*(radii[None, :]+radii[:, None])
+        bondmatrix = dist < 1.3 * (radii[None, :] + radii[:, None])
         fragments, C = get_clusters(bondmatrix)
         radii = np.array([get_property(sp, 'vdw_radius') for sp in geom.species])
-        shift = 0.
+        shift = 0.0
         C_total = C.copy()
 
         coords = list()
@@ -395,7 +398,7 @@ class InternalCoords(object):
         while not C_total.all():
             bondmatrix |= ~C_total & (dist < radii[None, :]+radii[:, None]+shift)
             C_total = get_clusters(bondmatrix)[1]
-            shift += 1.
+            shift += 1.0
         for i, j in combinations(range(len(geom)), 2):
             if bondmatrix[i, j]:
                 bond = Bond(i, j, C=C)
@@ -496,10 +499,10 @@ class InternalCoords(object):
         for i, dih in enumerate(self):
             if not isinstance(dih, Dihedral):
                 continue
-            diff = q[i]-template[i]
-            if abs(abs(diff)-2*pi) < pi/2:
-                q[i] -= 2*pi*np.sign(diff)
-            elif abs(abs(diff)-pi) < pi/2:
+            diff = q[i] - template[i]
+            if abs(abs(diff) - 2 * pi) < pi / 2:
+                q[i] -= 2 * pi * np.sign(diff)
+            elif abs(abs(diff) - pi) < pi/2:
                 q[i] -= pi*np.sign(diff)
                 swapped.append(dih)
                 candidates.update(dih.angles)
@@ -510,12 +513,12 @@ class InternalCoords(object):
             # either swapped or all its angles are candidates
             if all(dih in swapped or all(a in candidates for a in dih.angles)
                    for dih in self.dihedrals if ang in dih.angles):
-                q[i] = 2*pi-q[i]
+                q[i] = 2 * pi - q[i]
         return q
 
     @staticmethod
     def _reduce(n, c, f):
-        idxs = np.int64(np.floor(np.array(range(3**3*n))/n))
+        idxs = np.int64(np.floor(np.array(range(3 ** 3 * n)) / n))
         idxs, i = np.divmod(idxs, 3)
         idxs, j = np.divmod(idxs, 3)
         k = idxs % 3
@@ -546,7 +549,7 @@ class InternalCoords(object):
             idx = [k % len(geom) for k in coord.idx]
             for j, grad in zip(idx, grads):
                 B[i, j] += grad
-        return B.reshape(len(self), 3*len(geom))
+        return B.reshape(len(self), 3 * len(geom))
 
     def K_matrix(self, geom, grad):
         geom = geom.supercell()
@@ -569,12 +572,12 @@ class InternalCoords(object):
         # target = CartIter(q=q+dq)
         # prev = CartIter(geom.coords, q, dq)
         for i in range(100):
-            coords_new = geom.coords+B_inv.dot(dq).reshape(-1, 3)/angstrom
-            dcart_rms = Math.rms(coords_new-geom.coords)
+            coords_new = geom.coords + B_inv.dot(dq).reshape(-1, 3) / angstrom
+            dcart_rms = Math.rms(coords_new - geom.coords)
             geom.coords = coords_new
             q_new = self.eval_geom(geom, template=q)
-            dq_rms = Math.rms(q_new-q)
-            q, dq = q_new, dq-(q_new-q)
+            dq_rms = Math.rms(q_new - q)
+            q, dq = q_new, dq - (q_new - q)
             if dcart_rms < thre:
                 msg = 'Perfect transformation to cartesians in {} iterations'
                 break

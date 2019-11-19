@@ -43,19 +43,12 @@ def MopacSolver(cmd='mopac', method='PM7', workdir=None):
                 next(l for l in f if 'FINAL  POINT  AND  DERIVATIVES' in l)
                 next(f)
                 next(f)
-                gradients = list()
-                for _ in range(len(atoms)+(0 if lattice is None else 3)):
-                    row = list()
-                    for _ in range(3):
-                        line = next(f).split()
-                        grad_val = line[-2]
-                        try:
-                            grad_val = float(grad_val)
-                        except ValueError:
-                            grad_val = -1 * float(grad_val.split("-")[-1])
-                        row.append(grad_val)
-                    gradients.append(row)
-                gradients = np.array(gradients)
+                gradients = np.array(
+                    [
+                        [float(next(f).split()[6]) * kcal / angstrom for _ in range(3)]
+                        for _ in range(len(atoms) + (0 if lattice is None else 3))
+                    ]
+                )
 
             atoms, lattice = yield energy, gradients
     finally:

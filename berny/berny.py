@@ -269,11 +269,12 @@ class Berny(Generator):
 
 
 def update_hessian_min(H, dq, dg, log=no_log):
-    dH = dg[None, :]*dg[:, None]/dot(dq, dg) - \
-        H.dot(dq[None, :]*dq[:, None]).dot(H)/dq.dot(H).dot(dq)  # BFGS update
+    dH1 = dg[None, :] * dg[:, None] / dot(dq, dg)
+    dH2 = H.dot(dq[None, :] * dq[:, None]).dot(H) / dq.dot(H).dot(dq)
+    dH = dH1 - dH2
     log('Hessian update information:')
     log('* Change: RMS: {:.3}, max: {:.3}'.format(Math.rms(dH), abs(dH).max()))
-    return H+dH
+    return H + dH
 
 
 def update_hessian_ts(H, dq, dg, log=no_log):
@@ -302,9 +303,9 @@ def update_trust(trust, dE, dE_predicted, dq, log=no_log):
         r = 1.
     log("Trust update: Fletcher's parameter: {:.3}".format(r))
     if r < 0.25:
-        return norm(dq)/4
-    elif r > 0.75 and abs(norm(dq)-trust) < 1e-10:
-        return 2*trust
+        return norm(dq) / 4
+    elif r > 0.75 and abs(norm(dq) - trust) < 1e-10:
+        return 2 * trust
     else:
         return trust
 
@@ -334,23 +335,25 @@ def linear_search(E0, E1, g0, g1, log=no_log):
 
 
 def quadratic_step_min(g, H, trust, log=no_log):
-    ev = np.linalg.eigvalsh((H+H.T)/2)
+    ev = np.linalg.eigvalsh((H + H.T) / 2)
     rfo = np.vstack((np.hstack((H, g[:, None])),
                      np.hstack((g, 0))[None, :]))
-    D, V = eigh((rfo+rfo.T)/2)
-    dq = V[:-1, 0]/V[-1, 0]
+    D, V = eigh((rfo + rfo.T) / 2)
+    dq = V[:-1, 0] / V[-1, 0]
     l = D[0]
     if norm(dq) <= trust:
         log('Pure RFO step was performed:')
         on_sphere = False
     else:
+
         def steplength(l):
-            return norm(np.linalg.solve(l*eye(H.shape[0])-H, g))-trust
+            return norm(np.linalg.solve(l * eye(H.shape[0]) - H, g)) - trust
+
         l = Math.findroot(steplength, ev[0])  # minimization on sphere
-        dq = np.linalg.solve(l*eye(H.shape[0])-H, g)
+        dq = np.linalg.solve(l * eye(H.shape[0]) - H, g)
         on_sphere = True
         log('Minimization on sphere was performed:')
-    dE = dot(g, dq)+0.5*dq.dot(H).dot(dq)  # predicted energy change
+    dE = dot(g, dq) + 0.5 * dq.dot(H).dot(dq)  # predicted energy change
     log('* Trust radius: {:.2}'.format(trust))
     log('* Number of negative eigenvalues: {}'.format((ev < 0).sum()))
     log('* Lowest eigenvalue: {:.3}'.format(ev[0]))
