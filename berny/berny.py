@@ -70,10 +70,12 @@ class State(object):
     :param dict params: optimization parameters at the current step
     :param bool first: Is this the first step in the optimization
     :param Point previous: coordinates for the previous step in the optimization
+    :param Point interpolated: point obtained by linear interpolation (for
+           minimization only)
     """
 
     def __init__(self, geom, coords, trust, hessian, weights, future, params,
-                 first=True, previous=None):
+                 first=True, previous=None, interpolated=None):
         self.geom = geom
         self.coords = coords
         self.trust = trust
@@ -83,6 +85,7 @@ class State(object):
         self.params = params
         self.first = first
         self.previous = previous
+        self.interpolated = interpolated
 
     def as_dict(self):
         d = {"geom": self.geom.as_dict(),
@@ -93,7 +96,8 @@ class State(object):
              "future": self.future,
              "params": self.params,
              "first": self.first,
-             "previous": self.previous}
+             "previous": self.previous,
+             "interpolated": self.interpolated}
         return d
 
     @classmethod
@@ -103,7 +107,8 @@ class State(object):
 
         return cls(geom, coords, d["trust"], d["hessian"], d["weights"],
                    d["future"], d["params"], first=d["first"],
-                   previous=d["previous"])
+                   previous=d["previous"],
+                   interpolated=d["interpolated"])
 
 
 class Berny(Generator):
@@ -200,8 +205,6 @@ class Berny(Generator):
                                    s.predicted.E-s.interpolated.E,
                                    s.predicted.q-s.interpolated.q,
                                    log=log)
-            if s.trust < s.params["min_trust"]:
-                raise TrustRadiusException('The trust radius got too small; check forces?')
             if self.transition_state:
                 s.interpolated = current
             else:
@@ -215,8 +218,10 @@ class Berny(Generator):
                 )
         else:
             s.interpolated = current
+        if s.trust < s.params["min_trust"]:
+            raise TrustRadiusException('The trust radius got too small; check forces?')
         proj = dot(B, B_inv)
-        H_proj = proj.dot(s.H).dot(proj) + 1000*(eye(len(s.coords))-proj)
+        H_proj = proj.dot(s.H).dot(proj) + 1000 * (eye(len(s.coords))-proj)
 
         if self.transition_state:
             dq, dE, on_sphere = quadratic_step_ts(
@@ -226,8 +231,8 @@ class Berny(Generator):
             dq, dE, on_sphere = quadratic_step_min(
                 dot(proj, s.interpolated.g), H_proj, s.trust, log=log
             )
-        s.predicted = Point(s.interpolated.q+dq, s.interpolated.E+dE, None)
-        dq = s.predicted.q-current.q
+        s.predicted = Point(s.interpolated.q + dq, s.interpolated.E + dE, None)
+        dq = s.predicted.q - current.q
         log('Total step: RMS: {:.3}, max: {:.3}'.format(
             Math.rms(dq), max(abs(dq))
         ))
@@ -240,7 +245,7 @@ class Berny(Generator):
             s.best = current
         s.first = False
         self._converged = is_converged(
-            gradients, s.future.q-current.q, on_sphere, s.params, log=log
+            gradients, s.future.q - current.q, on_sphere, s.params, log=log
         )
         if self._n == self._maxsteps:
             log('Maximum number of steps reached')
@@ -260,7 +265,7 @@ class Berny(Generator):
         return self._maxsteps
 
     def throw(self, *args, **kwargs):
-        return Generator.close(self, *args, **kwargs)
+        return Generator.throw(self, *args, **kwargs)
 
 
 def update_hessian_min(H, dq, dg, log=no_log):
