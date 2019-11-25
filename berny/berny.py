@@ -25,7 +25,7 @@ __version__ = '0.2.1'
 
 defaults = {
     'gradientmax': 0.45e-3,
-    'gradientrms': 0.3e-3,
+    'gradientrms': 0.15e-3,
     'stepmax': 1.8e-3,
     'steprms': 1.2e-3,
     'trust': 0.3,
@@ -41,6 +41,8 @@ defaults = {
 - trust:
     Initial trust radius in atomic units. It is the maximum RMS of the
     quadratic step (see below).
+- min_trust:
+    Lower bound to allowed trust radius.
 
 - dihedral:
     Form dihedral angles.
@@ -169,7 +171,7 @@ class Berny(Generator):
         self._n += 1
         return self._state.geom
 
-    def update_hessian_exact(self, g, H, log=no_log):
+    def update_hessian_exact(self, g, H):
         log = self._log
         log.n = self._n
         s = self._state
@@ -198,12 +200,12 @@ class Berny(Generator):
                 )
             else:
                 s.H = update_hessian_min(
-                    s.H, current.q-s.best.q, current.g-s.best.g, log=log
+                    s.H, current.q - s.best.q, current.g - s.best.g, log=log
                 )
             s.trust = update_trust(s.trust,
-                                   current.E-s.previous.E,
-                                   s.predicted.E-s.interpolated.E,
-                                   s.predicted.q-s.interpolated.q,
+                                   current.E - s.previous.E,
+                                   s.predicted.E - s.interpolated.E,
+                                   s.predicted.q - s.interpolated.q,
                                    log=log)
             if self.transition_state:
                 s.interpolated = current
@@ -214,14 +216,14 @@ class Berny(Generator):
                     log=log
                 )
                 s.interpolated = Point(
-                    current.q+t*dq, E, t*s.best.g+(1-t)*current.g
+                    current.q + t * dq, E, t * s.best.g + (1 - t) * current.g
                 )
         else:
             s.interpolated = current
         if s.trust < s.params["min_trust"]:
             raise TrustRadiusException('The trust radius got too small; check forces?')
         proj = dot(B, B_inv)
-        H_proj = proj.dot(s.H).dot(proj) + 1000 * (eye(len(s.coords))-proj)
+        H_proj = proj.dot(s.H).dot(proj) + 1000 * (eye(len(s.coords)) - proj)
 
         if self.transition_state:
             dq, dE, on_sphere = quadratic_step_ts(
@@ -237,7 +239,7 @@ class Berny(Generator):
             Math.rms(dq), max(abs(dq))
         ))
         q, s.geom = s.coords.update_geom(
-            s.geom, current.q, s.predicted.q-current.q, B_inv, log=log
+            s.geom, current.q, s.predicted.q - current.q, B_inv, log=log
         )
         s.future = Point(q, None, None)
         s.previous = current
@@ -300,7 +302,7 @@ def update_trust(trust, dE, dE_predicted, dq, log=no_log):
     if dE != 0:
         r = dE/dE_predicted  # Fletcher's parameter
     else:
-        r = 1.
+        r = 1.0
     log("Trust update: Fletcher's parameter: {:.3}".format(r))
     if r < 0.25:
         return norm(dq) / 4
