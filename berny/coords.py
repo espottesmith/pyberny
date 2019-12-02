@@ -70,9 +70,9 @@ class Bond(InternalCoord):
                         vi = v[ii % 3]
                         vj = v[jj % 3]
                         # Is it the same atom?
-                        ab = (ii // 3 == jj // 3)
+                        ab = int(ii // 3 == jj // 3)
                         # Is it the same coordinate (x, y, z)?
-                        ij = (ii % 3 == jj % 3)
+                        ij = int(ii % 3 == jj % 3)
                         val = (-1) ** ab * (vi * vj - ij)/r
                         mat[ii, jj] = val
                         mat[jj, ii] = val
@@ -148,7 +148,7 @@ class Angle(InternalCoord):
         if grad:
             return phi, gradient
         elif second:
-            if phi > phi-1e6:
+            if phi > pi-1e6:
                 # Derivatives not well defined for linear angles
                 return phi, np.zeros((9, 9))
 
@@ -640,10 +640,4 @@ def get_dihedrals(center, coords, bondmatrix, C, superweak=False):
 
 
 def zeta(a, b, c):
-    #TODO: Make sure this is how this works for cases with >2 atoms
-    if a == b:
-        return 1
-    elif a == c:
-        return -1
-    else:
-        return 1
+    return int(a == b) - int(a == c)
