@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import numpy as np
+from numpy.linalg import norm
 
 
 def rms(A):
@@ -134,3 +135,29 @@ def findroot(f, lim):
         err = err_new
     else:
         raise FindrootException()
+
+
+def d_unit(a, ndim=3):
+    """
+    Returns the unit vector of the derivative of some vector with respect to a
+    parameter.
+
+    Taken from: Zimmerman Group, University of Michigan (pyGSM)
+    """
+    term1 = np.eye(ndim) / norm(a)
+    term2 = np.outer(a, a) / (norm(a) ** 3)
+    answer = term1 - term2
+    return answer
+
+
+def d_cross(a, b, da, db):
+    """
+    Given two vectors a, b and their derivatives w/r.t. a parameter, return the
+    derivative of the cross product
+
+    Taken from: Zimmerman Group, University of Michigan (pyGSM)
+    """
+    answer = np.zeros((da.shape[0], 3), dtype=float)
+    for i in range(da.shape[0]):
+        answer[i] = np.cross(a, db[i]) + np.cross(da[i], b)
+    return answer

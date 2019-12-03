@@ -69,7 +69,7 @@ class Bond(InternalCoord):
     def eval_second_deriv(self, coords):
         v = (coords[self.i] - coords[self.j]) * angstrom
         r = norm(v)
-        mat = np.zeros((6, 6))
+        mat = np.zeros((6, 6), dtype=float)
         comp_coords = np.hstack([coords[self.i], coords[self.j]])
         for ii, i_coord in enumerate(comp_coords):
             for jj, j_coord in enumerate(comp_coords):
@@ -166,7 +166,7 @@ class Angle(InternalCoord):
         phi, grad = self.eval_grad(coords)
         if phi > pi-1e6:
             # Derivatives not well defined for linear angles
-            return phi, np.zeros((9, 9))
+            return phi, np.zeros((9, 9), dtype=float)
 
         v1 = (coords[self.i] - coords[self.j]) * angstrom
         v2 = (coords[self.k] - coords[self.j]) * angstrom
@@ -175,7 +175,7 @@ class Angle(InternalCoord):
         sinq = np.sqrt(1 - cosq**2)
         l1 = norm(v1)
         l2 = norm(v2)
-        mat = np.zeros((9, 9))
+        mat = np.zeros((9, 9), dtype=float)
         comp_coords = np.hstack([coords[self.i], coords[self.j], coords[self.k]])
         for ii, i_coord in enumerate(comp_coords):
             for jj, j_coord in enumerate(comp_coords):
@@ -220,12 +220,18 @@ class Angle(InternalCoord):
 
 class LinearAngle(InternalCoord):
     def __init__(self, i, j, k, axis, **kwargs):
-        # This code is based on the LinearAngle class in Aldaz et al.'s pyGSM.
+        """
+        This class follows closely the implementation of Linear Angles in pyGSM,
+        written and maintained by the Zimmerman Group of the University of
+        Michigan.
+        """
         if i > k:
             i, j, k = k, j, i
         self.i = i
         self.j = j
         self.k = k
+        # For a given linear bend, two coordinates should be made
+        # One with axis = 0, one with axis = 1
         self.axis = axis
         self.idx = i, j, k
         self.e0 = None
@@ -243,10 +249,74 @@ class LinearAngle(InternalCoord):
         if self.e0 is None:
             self.setup(coords)
 
-        v = coords[self.k] - coords[self.i]
-        lv = norm(v)
-        ev = v / lv
-        #TODO: finish
+        vik = coords[self.k] - coords[self.i]
+        evik = vik / norm(vik)
+
+        # Construct vectors perpendicular to the linear bend axis
+        c1 = np.cross(evik, self.e0)
+        e1 = c1 / norm(c1)
+        c2 = np.cross(evik, e1)
+        e2 = c2 / norm(c2)
+
+        # Construct bond vectors for two bonds making up the angle
+        vji = coords[self.i] - coords[self.j]
+        eji = vji / norm(vji)
+        vjk = coords[self.k] - coords[self.j]
+        ejk = vjk / norm(vjk)
+
+        if self.axis == 0:
+            return eji.dot(e1) + ejk.dot(e1)
+        elif self.axis == 1:
+            return eji.dot(e2) + ejk.dot(e2)
+        else:
+            return ValueError("Invalid value of axis; axis can only be 0 or 1.")
+
+    def eval_grad(self, coords):
+        if self.e0 is None:
+            self.setup(coords)
+
+        vik = coords[self.k] - coords[self.i]
+        evik = vik / norm(vik)
+
+        # Construct vectors perpendicular to the linear bend axis
+        c1 = np.cross(evik, self.e0)
+        e1 = c1 / norm(c1)
+        c2 = np.cross(evik, e1)
+        e2 = c2 / norm(c2)
+
+        # Construct bond vectors for two bonds making up the angle
+        vji = coords[self.i] - coords[self.j]
+        eji = vji / norm(vji)
+        vjk = coords[self.k] - coords[self.j]
+        ejk = vjk / norm(vjk)
+
+        # Derivatives
+        # This code taken essentially directly from pyGSM
+        de0 = np.zeros((3, 3), dtype=float)
+        devik = Math.d_unit(vik)
+        dc1 = Math.d_cross(evik, self.e0, devik, de0)
+        de1 = dc1.dot(Math.d_unit(c1))
+        dc2 = Math.d_cross(evik, e1, devik, de1)
+        de2 = dc2.dot(Math.d_unit(c2))
+        deji = Math.d_unit(vji)
+        dejk = Math.d_unit(vjk)
+
+        if self.axis == 0:
+            e = e1
+            de = de1
+        else:
+            e = e2
+            de = de2
+
+        gradient = [deji.dot(e) - de.dot(eji) - de.dot(ejk),
+                       -deji.dot(e) - dejk.dot(e),
+                       de.dot(eji) + de.dot(ejk) + dejk.dot(e)]
+
+        return self.eval(coords), gradient
+
+    def eval_second_deriv(self, coords):
+        mat = np.zeros((9, 9), dtype=float)
+        pass
 
 
 class Dihedral(InternalCoord):
@@ -367,7 +437,7 @@ class Dihedral(InternalCoord):
         cospv2 = -1 * dot(v2, w) / (l2 * lw)
         sinpv2 = np.sqrt(1 - cospv2 ** 2)
 
-        mat = np.zeros((12, 12))
+        mat = np.zeros((12, 12), dtype=float)
 
         if not (1e-6 < np.arccos(cospv1) < pi-1e-6) and \
                 (1e-6 < np.arccos(cospv2) < pi-1e-6):
@@ -622,9 +692,9 @@ class InternalCoords(object):
 
     def B_matrix(self, geom):
         geom = geom.supercell()
-        B = np.zeros((len(self), len(geom), 3))
+        B = np.zeros((len(self), len(geom), 3), dtype=float)
         for i, coord in enumerate(self):
-            _, grads = coord.eval(geom.coords, grad=True)
+            _, grads = coord.eval_grad(geom.coords)
             idx = [k % len(geom) for k in coord.idx]
             for j, grad in zip(idx, grads):
                 B[i, j] += grad
@@ -632,10 +702,10 @@ class InternalCoords(object):
 
     def K_matrix(self, geom, grad):
         geom = geom.supercell()
-        K = np.zeros((len(geom) * 3, len(geom) * 3))
+        K = np.zeros((len(geom) * 3, len(geom) * 3), dtype=float)
 
         for ii, coord in enumerate(self):
-            _, mat = coord.eval(geom.coords, second=True)
+            _, mat = coord.eval_second_deriv(geom.coords)
             idx = [k % len(geom) for k in coord.idx]
             for kk, row in enumerate(mat):
                 for ll, val in enumerate(row):
