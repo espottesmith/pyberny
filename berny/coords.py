@@ -5,6 +5,7 @@ from __future__ import division
 
 from collections import OrderedDict
 from itertools import combinations, product
+import copy
 
 import numpy as np
 from numpy import dot, pi
@@ -13,7 +14,7 @@ from numpy.linalg import norm
 from . import Math
 from .species_data import get_property
 
-angstrom = 1/0.52917721092  #:
+angstrom = 1/0.52917721092
 
 
 class InternalCoord(object):
@@ -239,7 +240,7 @@ class LinearAngle(InternalCoord):
         InternalCoord.__init__(self, **kwargs)
 
     def setup(self, coords):
-        v = coords[self.k] - coords[self.i]
+        v = (coords[self.k] - coords[self.i]) * angstrom
         lv = norm(v)
         es = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
         best_idx = np.argmin([np.array(e).dot(v/lv)**2 for e in es])
@@ -249,7 +250,7 @@ class LinearAngle(InternalCoord):
         if self.e0 is None:
             self.setup(coords)
 
-        vik = coords[self.k] - coords[self.i]
+        vik = (coords[self.k] - coords[self.i]) * angstrom
         evik = vik / norm(vik)
 
         # Construct vectors perpendicular to the linear bend axis
@@ -259,9 +260,9 @@ class LinearAngle(InternalCoord):
         e2 = c2 / norm(c2)
 
         # Construct bond vectors for two bonds making up the angle
-        vji = coords[self.i] - coords[self.j]
+        vji = (coords[self.i] - coords[self.j]) * angstrom
         eji = vji / norm(vji)
-        vjk = coords[self.k] - coords[self.j]
+        vjk = (coords[self.k] - coords[self.j]) * angstrom
         ejk = vjk / norm(vjk)
 
         if self.axis == 0:
@@ -275,7 +276,7 @@ class LinearAngle(InternalCoord):
         if self.e0 is None:
             self.setup(coords)
 
-        vik = coords[self.k] - coords[self.i]
+        vik = (coords[self.k] - coords[self.i]) * angstrom
         evik = vik / norm(vik)
 
         # Construct vectors perpendicular to the linear bend axis
@@ -285,9 +286,9 @@ class LinearAngle(InternalCoord):
         e2 = c2 / norm(c2)
 
         # Construct bond vectors for two bonds making up the angle
-        vji = coords[self.i] - coords[self.j]
+        vji = (coords[self.i] - coords[self.j]) * angstrom
         eji = vji / norm(vji)
-        vjk = coords[self.k] - coords[self.j]
+        vjk = (coords[self.k] - coords[self.j]) * angstrom
         ejk = vjk / norm(vjk)
 
         # Derivatives
@@ -316,7 +317,23 @@ class LinearAngle(InternalCoord):
 
     def eval_second_deriv(self, coords):
         mat = np.zeros((9, 9), dtype=float)
-        pass
+        # Does this need the angstrom factor?
+        h = 0.001
+        coords_copy = copy.deepcopy(coords)
+        for ii, ind in enumerate(self.idx):
+            for jj in range(3):
+                coords_copy[ind, jj] += h
+                _, plusder = self.eval_grad(coords_copy)
+                coords_copy[ind, jj] -= 2 * h
+                _, minusder = self.eval_grad(coords_copy)
+                del coords_copy
+                deriv = (np.array(plusder) - np.array(minusder)) / 2
+
+                kk = ii // 3 + jj
+                for ll, val in enumerate(deriv.flatten()):
+                    mat[kk, ll] = val
+
+        return self.eval(coords), mat
 
 
 class Dihedral(InternalCoord):
