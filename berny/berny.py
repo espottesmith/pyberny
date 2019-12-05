@@ -161,11 +161,13 @@ class Berny(Generator):
                                 future=Point(coords.eval_geom(geom),
                                              None, None),
                                 params=params,
-                                first=True)
+                                first=True,
+                                time=time.time())
 
         self.transition_state = transition_state
         if restart:
             vars(s).update(restart)
+            s.time = time.time()
             return
         for line in str(s.coords).split('\n'):
             self._log(line)
@@ -255,8 +257,12 @@ class Berny(Generator):
         self._converged = is_converged(
             gradients, s.future.q - current.q, on_sphere, s.params, log=log
         )
+        current_time = time.time()
+        log('Time of last step: {:10.2f}s'.format(current_time - s.time))
+        s.time = current_time
         if self._n == self._maxsteps:
             log('Maximum number of steps reached')
+        log('***')
         if self._debug:
             return vars(s).copy()
 

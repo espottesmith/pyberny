@@ -573,7 +573,11 @@ class InternalCoords(object):
         for j in range(len(geom)):
             for i, k in combinations(np.flatnonzero(bondmatrix[j, :]), 2):
                 ang = Angle(i, j, k, C=C)
-                if ang.eval(geom.coords) > pi/4:
+                # If the angle is almost linear, use LinearAngle coordinates
+                if abs(ang.eval(geom.coords)) > 165/180 * pi:
+                    coords.append(LinearAngle(i, j, k, 0, C=C))
+                    coords.append(LinearAngle(i, j, k, 1, C=C))
+                elif ang.eval(geom.coords) > pi/4:
                     coords.append(ang)
         if dihedral:
             for bond in bonds:
