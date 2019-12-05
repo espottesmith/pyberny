@@ -4,6 +4,7 @@
 import sys
 from collections import namedtuple
 from itertools import chain
+import time
 
 import numpy as np
 from numpy.linalg import LinAlgError
@@ -74,10 +75,12 @@ class State(object):
     :param Point previous: coordinates for the previous step in the optimization
     :param Point interpolated: point obtained by linear interpolation (for
            minimization only)
+    :param float time: The current time (generally, time.time() should be used).
+           Default is None.
     """
 
     def __init__(self, geom, coords, trust, hessian, weights, future, params,
-                 first=True, previous=None, interpolated=None):
+                 first=True, previous=None, interpolated=None, time=None):
         self.geom = geom
         self.coords = coords
         self.trust = trust
@@ -88,6 +91,7 @@ class State(object):
         self.first = first
         self.previous = previous
         self.interpolated = interpolated
+        self.time = time
 
     def as_dict(self):
         d = {"geom": self.geom.as_dict(),
@@ -99,7 +103,8 @@ class State(object):
              "params": self.params,
              "first": self.first,
              "previous": self.previous,
-             "interpolated": self.interpolated}
+             "interpolated": self.interpolated,
+             "time": self.time}
         return d
 
     @classmethod
@@ -110,7 +115,8 @@ class State(object):
         return cls(geom, coords, d["trust"], d["hessian"], d["weights"],
                    d["future"], d["params"], first=d["first"],
                    previous=d["previous"],
-                   interpolated=d["interpolated"])
+                   interpolated=d["interpolated"],
+                   time=d["time"])
 
 
 class Berny(Generator):
