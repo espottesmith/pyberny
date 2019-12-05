@@ -614,6 +614,10 @@ class InternalCoords(object):
         return [c for c in self if isinstance(c, Angle)]
 
     @property
+    def linear_angles(self):
+        return [c for c in self if isinstance(c, LinearAngle)]
+
+    @property
     def dihedrals(self):
         return [c for c in self if isinstance(c, Dihedral)]
 
@@ -622,6 +626,7 @@ class InternalCoords(object):
         return OrderedDict([
             ('bonds', self.bonds),
             ('angles', self.angles),
+            ('linear angles', self.linear_angles)
             ('dihedrals', self.dihedrals)
         ])
 
@@ -630,6 +635,7 @@ class InternalCoords(object):
                 "@class": self.__class__.__name__,
                 "bonds": [b.as_dict() for b in self.bonds],
                 "angles": [a.as_dict() for a in self.angles],
+                "linear_angles": [la.as_dict() for la in self.linear_angles],
                 "dihedrals": [d.as_dict() for d in self.dihedrals],
                 "fragments": self.fragments}
 
@@ -637,9 +643,10 @@ class InternalCoords(object):
     def from_dict(cls, d):
         bonds = [Bond.from_dict(b) for b in d["bonds"]]
         angles = [Angle.from_dict(a) for a in d["angles"]]
+        linear_angles = [LinearAngle.from_dict(a) for a in d["linear_angles"]]
         dihedrals = [Dihedral.from_dict(dd) for dd in d["dihedrals"]]
         fragments = d["fragments"]
-        coords = bonds + angles + dihedrals
+        coords = bonds + angles + linear_angles + dihedrals
         return cls(coords, fragments)
 
     def __repr__(self):
