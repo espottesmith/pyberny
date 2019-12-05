@@ -145,7 +145,6 @@ class Angle(InternalCoord):
         elif dot_product > 1:
             dot_product = 1
         phi = np.arccos(dot_product)
-        # If we're handling linear bends, can this go away?
         if abs(phi) > pi-1e-6:
             gradient = [
                 (pi - phi) / (2 * norm(v1) ** 2) * v1,
@@ -217,123 +216,6 @@ class Angle(InternalCoord):
         if d["weak"] is not None:
             angle.weak = d["weak"]
         return angle
-
-
-class LinearAngle(InternalCoord):
-    def __init__(self, i, j, k, axis, **kwargs):
-        """
-        This class follows closely the implementation of Linear Angles in pyGSM,
-        written and maintained by the Zimmerman Group of the University of
-        Michigan.
-        """
-        if i > k:
-            i, j, k = k, j, i
-        self.i = i
-        self.j = j
-        self.k = k
-        # For a given linear bend, two coordinates should be made
-        # One with axis = 0, one with axis = 1
-        self.axis = axis
-        self.idx = i, j, k
-        self.e0 = None
-        self.geom = None
-        InternalCoord.__init__(self, **kwargs)
-
-    def setup(self, coords):
-        v = (coords[self.k] - coords[self.i]) * angstrom
-        lv = norm(v)
-        es = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-        best_idx = np.argmin([np.array(e).dot(v/lv)**2 for e in es])
-        self.e0 = np.array(es[best_idx])
-
-    def eval(self, coords):
-        if self.e0 is None:
-            self.setup(coords)
-
-        vik = (coords[self.k] - coords[self.i]) * angstrom
-        evik = vik / norm(vik)
-
-        # Construct vectors perpendicular to the linear bend axis
-        c1 = np.cross(evik, self.e0)
-        e1 = c1 / norm(c1)
-        c2 = np.cross(evik, e1)
-        e2 = c2 / norm(c2)
-
-        # Construct bond vectors for two bonds making up the angle
-        vji = (coords[self.i] - coords[self.j]) * angstrom
-        eji = vji / norm(vji)
-        vjk = (coords[self.k] - coords[self.j]) * angstrom
-        ejk = vjk / norm(vjk)
-
-        if self.axis == 0:
-            return eji.dot(e1) + ejk.dot(e1)
-        elif self.axis == 1:
-            return eji.dot(e2) + ejk.dot(e2)
-        else:
-            return ValueError("Invalid value of axis; axis can only be 0 or 1.")
-
-    def eval_grad(self, coords):
-        if self.e0 is None:
-            self.setup(coords)
-
-        vik = (coords[self.k] - coords[self.i]) * angstrom
-        evik = vik / norm(vik)
-
-        # Construct vectors perpendicular to the linear bend axis
-        c1 = np.cross(evik, self.e0)
-        e1 = c1 / norm(c1)
-        c2 = np.cross(evik, e1)
-        e2 = c2 / norm(c2)
-
-        # Construct bond vectors for two bonds making up the angle
-        vji = (coords[self.i] - coords[self.j]) * angstrom
-        eji = vji / norm(vji)
-        vjk = (coords[self.k] - coords[self.j]) * angstrom
-        ejk = vjk / norm(vjk)
-
-        # Derivatives
-        # This code taken essentially directly from pyGSM
-        de0 = np.zeros((3, 3), dtype=float)
-        devik = Math.d_unit(vik)
-        dc1 = Math.d_cross(evik, self.e0, devik, de0)
-        de1 = dc1.dot(Math.d_unit(c1))
-        dc2 = Math.d_cross(evik, e1, devik, de1)
-        de2 = dc2.dot(Math.d_unit(c2))
-        deji = Math.d_unit(vji)
-        dejk = Math.d_unit(vjk)
-
-        if self.axis == 0:
-            e = e1
-            de = de1
-        else:
-            e = e2
-            de = de2
-
-        gradient = [deji.dot(e) - de.dot(eji) - de.dot(ejk),
-                       -deji.dot(e) - dejk.dot(e),
-                       de.dot(eji) + de.dot(ejk) + dejk.dot(e)]
-
-        return self.eval(coords), gradient
-
-    def eval_second_deriv(self, coords):
-        mat = np.zeros((9, 9), dtype=float)
-        # Does this need the angstrom factor?
-        h = 0.001
-        coords_copy = copy.deepcopy(coords)
-        for ii, ind in enumerate(self.idx):
-            for jj in range(3):
-                coords_copy[ind, jj] += h
-                _, plusder = self.eval_grad(coords_copy)
-                coords_copy[ind, jj] -= 2 * h
-                _, minusder = self.eval_grad(coords_copy)
-                del coords_copy
-                deriv = (np.array(plusder) - np.array(minusder)) / 2
-
-                kk = ii // 3 + jj
-                for ll, val in enumerate(deriv.flatten()):
-                    mat[kk, ll] = val
-
-        return self.eval(coords), mat
 
 
 class Dihedral(InternalCoord):
@@ -573,11 +455,7 @@ class InternalCoords(object):
         for j in range(len(geom)):
             for i, k in combinations(np.flatnonzero(bondmatrix[j, :]), 2):
                 ang = Angle(i, j, k, C=C)
-                # If the angle is almost linear, use LinearAngle coordinates
-                if abs(ang.eval(geom.coords)) > 165/180 * pi:
-                    coords.append(LinearAngle(i, j, k, 0, C=C))
-                    coords.append(LinearAngle(i, j, k, 1, C=C))
-                elif ang.eval(geom.coords) > pi/4:
+                if ang.eval(geom.coords) > pi/4:
                     coords.append(ang)
         if dihedral:
             for bond in bonds:
@@ -614,10 +492,6 @@ class InternalCoords(object):
         return [c for c in self if isinstance(c, Angle)]
 
     @property
-    def linear_angles(self):
-        return [c for c in self if isinstance(c, LinearAngle)]
-
-    @property
     def dihedrals(self):
         return [c for c in self if isinstance(c, Dihedral)]
 
@@ -626,7 +500,6 @@ class InternalCoords(object):
         return OrderedDict([
             ('bonds', self.bonds),
             ('angles', self.angles),
-            ('linear angles', self.linear_angles)
             ('dihedrals', self.dihedrals)
         ])
 
@@ -635,7 +508,6 @@ class InternalCoords(object):
                 "@class": self.__class__.__name__,
                 "bonds": [b.as_dict() for b in self.bonds],
                 "angles": [a.as_dict() for a in self.angles],
-                "linear_angles": [la.as_dict() for la in self.linear_angles],
                 "dihedrals": [d.as_dict() for d in self.dihedrals],
                 "fragments": self.fragments}
 
@@ -643,7 +515,6 @@ class InternalCoords(object):
     def from_dict(cls, d):
         bonds = [Bond.from_dict(b) for b in d["bonds"]]
         angles = [Angle.from_dict(a) for a in d["angles"]]
-        linear_angles = [LinearAngle.from_dict(a) for a in d["linear_angles"]]
         dihedrals = [Dihedral.from_dict(dd) for dd in d["dihedrals"]]
         fragments = d["fragments"]
         coords = bonds + angles + linear_angles + dihedrals
