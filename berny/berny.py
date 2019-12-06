@@ -4,6 +4,7 @@
 import sys
 from collections import namedtuple
 from itertools import chain
+import time
 
 import numpy as np
 from numpy.linalg import LinAlgError
@@ -74,10 +75,12 @@ class State(object):
     :param Point previous: coordinates for the previous step in the optimization
     :param Point interpolated: point obtained by linear interpolation (for
            minimization only)
+    :param float time: Current time (should typically be based on time.time()).
+           Default is None.
     """
 
     def __init__(self, geom, coords, trust, hessian, weights, future, params,
-                 first=True, previous=None, interpolated=None):
+                 first=True, previous=None, interpolated=None, t=None):
         self.geom = geom
         self.coords = coords
         self.trust = trust
@@ -88,6 +91,7 @@ class State(object):
         self.first = first
         self.previous = previous
         self.interpolated = interpolated
+        self.time = t or time.time()
 
     def as_dict(self):
         d = {"geom": self.geom.as_dict(),
@@ -99,7 +103,8 @@ class State(object):
              "params": self.params,
              "first": self.first,
              "previous": self.previous,
-             "interpolated": self.interpolated}
+             "interpolated": self.interpolated,
+             "time": self.time}
         return d
 
     @classmethod
@@ -251,6 +256,10 @@ class Berny(Generator):
         )
         if self._n == self._maxsteps:
             log('Maximum number of steps reached')
+
+        current_time = time.time()
+        log("Time of last step: {:10.2f}s".format(current_time - s.time))
+        s.time = current_time
         if self._debug:
             return vars(s).copy()
 
