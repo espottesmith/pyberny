@@ -27,10 +27,39 @@ class Geometry(object):
     :py:func:`format` with the same available formats as :py:meth:`dump`.
     """
 
-    def __init__(self, species, coords, lattice=None):
+    def __init__(self, species, coords, ghost_coords=None, lattice=None):
         self.species = species
         self.coords = np.array(coords)
         self.lattice = np.array(lattice) if lattice is not None else None
+        self.ghosts = np.array(ghost_coords) if ghost_coords is not None else None
+
+    @property
+    def species_with_ghosts(self):
+        all_species = list()
+        for specie in self.species:
+            all_species.append(specie)
+        for _ in self.ghosts:
+            all_species.append("_")
+
+        return all_species
+
+    @property
+    def coords_with_ghosts(self):
+        all_coords = list()
+        for coords in self.coords:
+            all_coords.append(coords)
+        for ghost in self.ghosts:
+            all_coords.append(ghost)
+
+        return all_coords
+
+    def add_ghost(self, coords):
+        if self.ghosts is not None:
+            ghosts = [g for g in self.ghosts]
+            ghosts.append(np.array(coords))
+            self.ghosts = np.array(ghosts)
+        else:
+            self.ghosts = np.array([coords])
 
     @classmethod
     def from_atoms(cls, atoms, lattice=None, unit=1.):
@@ -41,6 +70,13 @@ class Geometry(object):
         :param list lattice: list of lattice vectors (None for a molecule)
         :param float unit: value to multiple atomic coordinates with
         """
+        species = list()
+
+        ghost_coords = list()
+        for sp, coord in atoms:
+            if sp.upper() == "X":
+
+
         species = [sp for sp, _ in atoms]
         coords = [np.array(coord, dtype=float)*unit for _, coord in atoms]
         return cls(species, coords, lattice)
