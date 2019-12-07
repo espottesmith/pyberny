@@ -3,7 +3,6 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 import sys
 from collections import namedtuple
-from itertools import chain
 import time
 
 import numpy as np
@@ -31,6 +30,7 @@ defaults = {
     'steprms': 1.2e-3,
     'trust': 0.3,
     'min_trust': 1e-6,
+    'fail_low_trust': False,
     'dihedral': True,
     'superweakdih': False,
 }
@@ -150,16 +150,17 @@ class Berny(Generator):
         self._maxsteps = maxsteps
         self._converged = False
         self._n = 0
-        params = dict(chain(defaults.items(), params.items()))
+        p = defaults
+        p.update(params)
         coords = InternalCoords.from_geometry(geom,
-                                              dihedral=params['dihedral'],
-                                              superweakdih=params['superweakdih'])
-        s = self._state = State(geom=geom, coords=coords, trust=params["trust"],
+                                              dihedral=p['dihedral'],
+                                              superweakdih=p['superweakdih'])
+        s = self._state = State(geom=geom, coords=coords, trust=p["trust"],
                                 hessian=coords.hessian_guess(geom),
                                 weights=coords.weights(geom),
                                 future=Point(coords.eval_geom(geom),
                                              None, None),
-                                params=params,
+                                params=p,
                                 first=True)
 
         self.transition_state = transition_state
@@ -226,7 +227,10 @@ class Berny(Generator):
         else:
             s.interpolated = current
         if s.trust < s.params["min_trust"]:
-            raise TrustRadiusException('The trust radius got too small; check forces?')
+            if s.params["fail_low_trust"]:
+                raise TrustRadiusException("The trust radius got too small, check forces?")
+            else:
+                s.trust = s.params["min_trust"]
         proj = dot(B, B_inv)
         H_proj = proj.dot(s.H).dot(proj) + 1000 * (eye(len(s.coords)) - proj)
 
