@@ -5,7 +5,6 @@ from __future__ import division
 
 from collections import OrderedDict
 from itertools import combinations, product
-import copy
 
 import numpy as np
 from numpy import dot, pi
@@ -57,34 +56,29 @@ class Bond(InternalCoord):
     def center(self, ijk):
         return np.round(ijk[[self.i, self.j]].sum(0))
 
-    def eval(self, coords):
+    def eval(self, coords, grad=False, second=False):
         v = (coords[self.i] - coords[self.j]) * angstrom
         r = norm(v)
-        return r
-
-    def eval_grad(self, coords):
-        v = (coords[self.i] - coords[self.j]) * angstrom
-        r = norm(v)
-        return r, [v / r, -v / r]
-
-    def eval_second_deriv(self, coords):
-        v = (coords[self.i] - coords[self.j]) * angstrom
-        r = norm(v)
-        mat = np.zeros((6, 6), dtype=float)
-        comp_coords = np.hstack([coords[self.i], coords[self.j]])
-        for ii, i_coord in enumerate(comp_coords):
-            for jj, j_coord in enumerate(comp_coords):
-                if jj <= ii:
-                    vi = v[ii % 3]
-                    vj = v[jj % 3]
-                    # Is it the same atom?
-                    ab = int(ii // 3 == jj // 3)
-                    # Is it the same coordinate (x, y, z)?
-                    ij = int(ii % 3 == jj % 3)
-                    val = (-1) ** ab * (vi * vj - ij)/r
-                    mat[ii, jj] = val
-                    mat[jj, ii] = val
-        return r, mat
+        if grad:
+            return r, [v / r, -v / r]
+        elif second:
+            mat = np.zeros((6, 6))
+            comp_coords = np.hstack([coords[self.i], coords[self.j]])
+            for ii, i_coord in enumerate(comp_coords):
+                for jj, j_coord in enumerate(comp_coords):
+                    if jj <= ii:
+                        vi = v[ii % 3]
+                        vj = v[jj % 3]
+                        # Is it the same atom?
+                        ab = int(ii // 3 == jj // 3)
+                        # Is it the same coordinate (x, y, z)?
+                        ij = int(ii % 3 == jj % 3)
+                        val = (-1) ** ab * (vi * vj - ij)/r
+                        mat[ii, jj] = val
+                        mat[jj, ii] = val
+            return r, mat
+        else:
+            return r
 
     def as_dict(self):
         bond_dict = {"@module": self.__class__.__module__,
@@ -125,7 +119,7 @@ class Angle(InternalCoord):
     def center(self, ijk):
         return np.round(2 * ijk[self.j])
 
-    def eval(self, coords):
+    def eval(self, coords, grad=False, second=False):
         v1 = (coords[self.i] - coords[self.j]) * angstrom
         v2 = (coords[self.k] - coords[self.j]) * angstrom
         dot_product = np.dot(v1, v2) / (norm(v1)*norm(v2))
@@ -134,17 +128,8 @@ class Angle(InternalCoord):
         elif dot_product > 1:
             dot_product = 1
         phi = np.arccos(dot_product)
-        return phi
-
-    def eval_grad(self, coords):
-        v1 = (coords[self.i] - coords[self.j]) * angstrom
-        v2 = (coords[self.k] - coords[self.j]) * angstrom
-        dot_product = np.dot(v1, v2) / (norm(v1)*norm(v2))
-        if dot_product < -1:
-            dot_product = -1
-        elif dot_product > 1:
-            dot_product = 1
-        phi = np.arccos(dot_product)
+        if not grad and not second:
+            return phi
         if abs(phi) > pi-1e-6:
             gradient = [
                 (pi - phi) / (2 * norm(v1) ** 2) * v1,
@@ -160,45 +145,41 @@ class Angle(InternalCoord):
                 1 / np.tan(phi) * v2 / norm(v2) ** 2
                 - v1 / (norm(v1) * norm(v2) * np.sin(phi))
             ]
-        return phi, gradient
+        if grad:
+            return phi, gradient
+        elif second:
+            if phi > pi-1e6:
+                # Derivatives not well defined for linear angles
+                return phi, np.zeros((9, 9))
 
-    def eval_second_deriv(self, coords):
-        phi, grad = self.eval_grad(coords)
-        if phi > pi-1e6:
-            # Derivatives not well defined for linear angles
-            return phi, np.zeros((9, 9), dtype=float)
-
-        v1 = (coords[self.i] - coords[self.j]) * angstrom
-        v2 = (coords[self.k] - coords[self.j]) * angstrom
-        dot_product = np.dot(v1, v2) / (norm(v1)*norm(v2))
-        cosq = dot_product
-        sinq = np.sqrt(1 - cosq**2)
-        l1 = norm(v1)
-        l2 = norm(v2)
-        mat = np.zeros((9, 9), dtype=float)
-        comp_coords = np.hstack([coords[self.i], coords[self.j], coords[self.k]])
-        for ii, i_coord in enumerate(comp_coords):
-            for jj, j_coord in enumerate(comp_coords):
-                if jj <= ii:
-                    v1i = v1[ii % 3]
-                    v2i = v2[jj % 3]
-                    v1j = v1[jj % 3]
-                    v2j = v2[jj % 3]
-                    # Is it the same coordinate (x, y, z)?
-                    ij = (ii % 3 == jj % 3)
-                    term_1 = zeta(ii//3, 0, 1) * zeta(jj//3, 0, 1) * (v1i * v2j + v2i + v1j - 3 *
-                                                                      v1i * v1j * cosq + ij * cosq) / l1**2
-                    term_2 = zeta(ii//3, 2, 1) * zeta(jj//3, 2, 1) * (v1i * v2j + v2i + v1j - 3 *
-                                                                      v2i * v2j * cosq + ij * cosq) / l2**2
-                    term_3 = zeta(ii//3, 0, 1) * zeta(jj//3, 2, 1) * (v1i * v1j + v2i * v2j - v1i * v2j * cosq -
-                                                                      ij) / (l1 * l2)
-                    term_4 = zeta(ii//3, 2, 1) * zeta(jj//3, 0, 1) * (v1i * v1j + v2i * v2j - v2i * v1j * cosq -
-                                                                      ij) / (l1 * l2)
-                    term_5 = -1 * cosq * grad[ii // 3][ii % 3] * grad[jj // 3][jj % 3]
-                    val = sum([term_1, term_2, term_3, term_4, term_5]) / sinq
-                    mat[ii, jj] = val
-                    mat[jj, ii] = val
-        return phi, mat
+            cosq = dot_product
+            sinq = np.sqrt(1 - cosq**2)
+            l1 = norm(v1)
+            l2 = norm(v2)
+            mat = np.zeros((9, 9))
+            comp_coords = np.hstack([coords[self.i], coords[self.j], coords[self.k]])
+            for ii, i_coord in enumerate(comp_coords):
+                for jj, j_coord in enumerate(comp_coords):
+                    if jj <= ii:
+                        v1i = v1[ii % 3]
+                        v2i = v2[jj % 3]
+                        v1j = v1[jj % 3]
+                        v2j = v2[jj % 3]
+                        # Is it the same coordinate (x, y, z)?
+                        ij = (ii % 3 == jj % 3)
+                        term_1 = zeta(ii//3, 0, 1) * zeta(jj//3, 0, 1) * (v1i * v2j + v2i + v1j - 3 *
+                                                                          v1i * v1j * cosq + ij * cosq) / l1**2
+                        term_2 = zeta(ii//3, 2, 1) * zeta(jj//3, 2, 1) * (v1i * v2j + v2i + v1j - 3 *
+                                                                          v2i * v2j * cosq + ij * cosq) / l2**2
+                        term_3 = zeta(ii//3, 0, 1) * zeta(jj//3, 2, 1) * (v1i * v1j + v2i * v2j - v1i * v2j * cosq -
+                                                                          ij) / (l1 * l2)
+                        term_4 = zeta(ii//3, 2, 1) * zeta(jj//3, 0, 1) * (v1i * v1j + v2i * v2j - v2i * v1j * cosq -
+                                                                          ij) / (l1 * l2)
+                        term_5 = -1 * cosq * grad[ii // 3][ii % 3] * grad[jj // 3][jj % 3]
+                        val = sum([term_1, term_2, term_3, term_4, term_5]) / sinq
+                        mat[ii, jj] = val
+                        mat[jj, ii] = val
+            return phi, mat
 
     def as_dict(self):
         angle_dict = {"@module": self.__class__.__module__,
@@ -246,7 +227,7 @@ class Dihedral(InternalCoord):
     def center(self, ijk):
         return np.round(ijk[[self.j, self.k]].sum(0))
 
-    def eval(self, coords):
+    def eval(self, coords, grad=False, second=False):
         v1 = (coords[self.i] - coords[self.j]) * angstrom
         v2 = (coords[self.l] - coords[self.k]) * angstrom
         w = (coords[self.k] - coords[self.j]) * angstrom
@@ -261,131 +242,102 @@ class Dihedral(InternalCoord):
         elif dot_product > 1:
             dot_product = 1
         phi = np.arccos(dot_product) * sgn
-        return phi
+        if grad:
+            if abs(phi) > pi-1e-6:
+                g = Math.cross(w, a1)
+                g = g / norm(g)
+                A = dot(v1, ew) / norm(w)
+                B = dot(v2, ew) / norm(w)
+                grad = [
+                    g / (norm(g) * norm(a1)),
+                    -((1 - A) / norm(a1) - B / norm(a2)) * g,
+                    -((1 + B) / norm(a2) + A / norm(a1)) * g,
+                    g / (norm(g) * norm(a2))
+                ]
+            elif abs(phi) < 1e-6:
+                g = Math.cross(w, a1)
+                g = g/norm(g)
+                A = dot(v1, ew) / norm(w)
+                B = dot(v2, ew) / norm(w)
+                grad = [
+                    g / (norm(g) * norm(a1)),
+                    -((1 - A) / norm(a1) + B / norm(a2)) * g,
+                    ((1+B) / norm(a2) - A / norm(a1)) * g,
+                    -g / (norm(g) * norm(a2))
+                ]
+            else:
+                A = dot(v1, ew) / norm(w)
+                B = dot(v2, ew) / norm(w)
+                grad = [
+                    1 / np.tan(phi) * a1 / norm(a1) ** 2 - a2 / (norm(a1) * norm(a2) * np.sin(phi)),
+                    ((1 - A) * a2 - B * a1) / (norm(a1) * norm(a2) * np.sin(phi)) -
+                    1 / np.tan(phi) * ((1 - A) * a1 / norm(a1) ** 2 - B * a2 / norm(a2) ** 2),
+                    ((1 + B) * a1 + A * a2) / (norm(a1) * norm(a2) * np.sin(phi)) -
+                    1 / np.tan(phi) * ((1 + B) * a2 / norm(a2) ** 2 + A * a1 / norm(a1) ** 2),
+                    1 / np.tan(phi) * a2 / norm(a2) ** 2 - a1 / (norm(a1) * norm(a2) * np.sin(phi))
+                ]
+            return phi, grad
+        elif second:
+            l1 = norm(v1)
+            l2 = norm(v2)
+            lw = norm(w)
+            v1xw = Math.cross(v1, w)
+            v2xw = Math.cross(v2, w)
+            cospv1 = dot(v1, w) / (l1 * lw)
+            sinpv1 = np.sqrt(1 - cospv1 ** 2)
+            cospv2 = -1 * dot(v2, w) / (l2 * lw)
+            sinpv2 = np.sqrt(1 - cospv2 ** 2)
+            mat = np.zeros((12, 12))
+            if not (1e-6 < np.arccos(cospv1) < pi-1e-6) and \
+                    (1e-6 < np.arccos(cospv2) < pi-1e-6):
+                return phi, mat
+            comp_coords = np.hstack([coords[self.i], coords[self.j], coords[self.k], coords[self.l]])
+            for ii, i_coord in enumerate(comp_coords):
+                for jj, j_coord in enumerate(comp_coords):
+                    if ii // 3 == 3 and jj // 3 == 0:
+                        mat[ii, jj] = 0
+                        mat[jj, ii] = 0
+                    elif jj <= ii:
+                        # Is it the same atom?
+                        ab = (ii // 3 == jj // 3)
+                        i = ii % 3
+                        j = jj % 3
+                        k = (3 - (i + j)) - 1
+                        t = list()
+                        for s in [[ii, jj], [jj, ii]]:
+                            v1j = v1[s[1] % 3]
+                            v2j = v2[s[1] % 3]
+                            wj = w[s[1] % 3]
+                            t.append(zeta(i, 0, 1) * zeta(j, 0, 1) * v1xw[s[0] % 3] *
+                                     (wj * cospv1 - v1j) / l1**2 / sinpv1**4)
+                            t.append(zeta(i, 3, 2) * zeta(j, 3, 2) * v2xw[s[0] % 3] *
+                                     (wj * cospv2 - v2j) / l2**2 / sinpv2**4)
+                            t.append((zeta(i, 0, 1) * zeta(j, 3, 2) +
+                                      zeta(i, 2, 3) * zeta(j, 1, 0)) *
+                                     v1xw[i % 3] * (wj - 2 * v1j * cospv1 + wj * cospv1 ** 2) /
+                                     (2 * l1 * lw * sinpv1 ** 4))
+                            t.append((zeta(i, 3, 2) * zeta(j, 2, 1) +
+                                      zeta(i, 2, 1) * zeta(j, 3, 2)) *
+                                     v2xw[i % 3] * (wj + 2 * v1j * cospv2 + wj * cospv2 ** 2) /
+                                     (2 * l2 * lw * sinpv2 ** 4))
+                            t.append(zeta(i, 1, 2) * zeta(j, 2, 1) * v1xw[s[0] % 3] *
+                                     (v1j + v1j * cospv1 ** 2 - 3 * wj * cospv1 + wj * cospv1 ** 3) /
+                                     (2 * lw**2 * sinpv1**4))
+                            t.append(zeta(i, 1, 2) * zeta(j, 2, 1) * v2xw[s[0] % 3] *
+                                     (v2j + v2j * cospv2 ** 2 + 3 * wj * cospv2 + wj * cospv2 ** 3) /
+                                     (2 * lw**2 * sinpv2**4))
 
-    def eval_grad(self, coords):
-        v1 = (coords[self.i] - coords[self.j]) * angstrom
-        v2 = (coords[self.l] - coords[self.k]) * angstrom
-        w = (coords[self.k] - coords[self.j]) * angstrom
-        ew = w / norm(w)
-        a1 = v1 - dot(v1, ew) * ew
-        a2 = v2 - dot(v2, ew) * ew
-        sgn = np.sign(np.linalg.det(np.array([v2, v1, w])))
-        sgn = sgn or 1
-        dot_product = dot(a1, a2) / (norm(a1) * norm(a2))
-        phi = np.arccos(dot_product) * sgn
-        if abs(phi) > pi-1e-6:
-            g = Math.cross(w, a1)
-            g = g / norm(g)
-            A = dot(v1, ew) / norm(w)
-            B = dot(v2, ew) / norm(w)
-            grad = [
-                g / (norm(g) * norm(a1)),
-                -((1 - A) / norm(a1) - B / norm(a2)) * g,
-                -((1 + B) / norm(a2) + A / norm(a1)) * g,
-                g / (norm(g) * norm(a2))
-            ]
-        elif abs(phi) < 1e-6:
-            g = Math.cross(w, a1)
-            g = g/norm(g)
-            A = dot(v1, ew) / norm(w)
-            B = dot(v2, ew) / norm(w)
-            grad = [
-                g / (norm(g) * norm(a1)),
-                -((1 - A) / norm(a1) + B / norm(a2)) * g,
-                ((1+B) / norm(a2) - A / norm(a1)) * g,
-                -g / (norm(g) * norm(a2))
-            ]
-        else:
-            A = dot(v1, ew) / norm(w)
-            B = dot(v2, ew) / norm(w)
-            grad = [
-                1 / np.tan(phi) * a1 / norm(a1) ** 2 - a2 / (norm(a1) * norm(a2) * np.sin(phi)),
-                ((1 - A) * a2 - B * a1) / (norm(a1) * norm(a2) * np.sin(phi)) -
-                1 / np.tan(phi) * ((1 - A) * a1 / norm(a1) ** 2 - B * a2 / norm(a2) ** 2),
-                ((1 + B) * a1 + A * a2) / (norm(a1) * norm(a2) * np.sin(phi)) -
-                1 / np.tan(phi) * ((1 + B) * a2 / norm(a2) ** 2 + A * a1 / norm(a1) ** 2),
-                1 / np.tan(phi) * a2 / norm(a2) ** 2 - a1 / (norm(a1) * norm(a2) * np.sin(phi))
-            ]
-        return phi, grad
+                        t.append((1 - ab) * (zeta(i, 0, 1) * zeta(j, 1, 2) + zeta(i, 2, 1) * zeta(j, 1, 0)) *
+                                 (j - i) * (-1/2) ** abs(j - i) * (w[k] * cospv1 - v1[k]) / (l1 * lw * sinpv1))
+                        t.append((1 - ab) * (zeta(i, 3, 1) * zeta(j, 1, 2) + zeta(i, 2, 1) * zeta(j, 1, 0)) *
+                                 (j - i) * (-1/2) ** abs(j - i) * (w[k] * cospv2 - v2[k]) / (l2 * lw * sinpv2))
 
-    def eval_second_deriv(self, coords):
-        v1 = (coords[self.i] - coords[self.j]) * angstrom
-        v2 = (coords[self.l] - coords[self.k]) * angstrom
-        w = (coords[self.k] - coords[self.j]) * angstrom
-        ew = w / norm(w)
-
-        a1 = v1 - dot(v1, ew) * ew
-        a2 = v2 - dot(v2, ew) * ew
-
-        sgn = np.sign(np.linalg.det(np.array([v2, v1, w])))
-        sgn = sgn or 1
-
-        dot_product = dot(a1, a2) / (norm(a1) * norm(a2))
-        phi = np.arccos(dot_product) * sgn
-
-        l1 = norm(v1)
-        l2 = norm(v2)
-        lw = norm(w)
-
-        v1xw = Math.cross(v1, w)
-        v2xw = Math.cross(v2, w)
-
-        cospv1 = dot(v1, w) / (l1 * lw)
-        sinpv1 = np.sqrt(1 - cospv1 ** 2)
-        cospv2 = -1 * dot(v2, w) / (l2 * lw)
-        sinpv2 = np.sqrt(1 - cospv2 ** 2)
-
-        mat = np.zeros((12, 12), dtype=float)
-
-        if not (1e-6 < np.arccos(cospv1) < pi-1e-6) and \
-                (1e-6 < np.arccos(cospv2) < pi-1e-6):
+                        val = sum(t)
+                        mat[ii, jj] = val
+                        mat[jj, ii] = val
             return phi, mat
-        comp_coords = np.hstack([coords[self.i], coords[self.j], coords[self.k], coords[self.l]])
-        for ii, i_coord in enumerate(comp_coords):
-            for jj, j_coord in enumerate(comp_coords):
-                if ii // 3 == 3 and jj // 3 == 0:
-                    mat[ii, jj] = 0
-                    mat[jj, ii] = 0
-                elif jj <= ii:
-                    # Is it the same atom?
-                    ab = (ii // 3 == jj // 3)
-                    i = ii % 3
-                    j = jj % 3
-                    k = (3 - (i + j)) - 1
-                    t = list()
-                    for s in [[ii, jj], [jj, ii]]:
-                        v1j = v1[s[1] % 3]
-                        v2j = v2[s[1] % 3]
-                        wj = w[s[1] % 3]
-                        t.append(zeta(i, 0, 1) * zeta(j, 0, 1) * v1xw[s[0] % 3] *
-                                 (wj * cospv1 - v1j) / l1**2 / sinpv1**4)
-                        t.append(zeta(i, 3, 2) * zeta(j, 3, 2) * v2xw[s[0] % 3] *
-                                 (wj * cospv2 - v2j) / l2**2 / sinpv2**4)
-                        t.append((zeta(i, 0, 1) * zeta(j, 3, 2) +
-                                  zeta(i, 2, 3) * zeta(j, 1, 0)) *
-                                 v1xw[i % 3] * (wj - 2 * v1j * cospv1 + wj * cospv1 ** 2) /
-                                 (2 * l1 * lw * sinpv1 ** 4))
-                        t.append((zeta(i, 3, 2) * zeta(j, 2, 1) +
-                                  zeta(i, 2, 1) * zeta(j, 3, 2)) *
-                                 v2xw[i % 3] * (wj + 2 * v1j * cospv2 + wj * cospv2 ** 2) /
-                                 (2 * l2 * lw * sinpv2 ** 4))
-                        t.append(zeta(i, 1, 2) * zeta(j, 2, 1) * v1xw[s[0] % 3] *
-                                 (v1j + v1j * cospv1 ** 2 - 3 * wj * cospv1 + wj * cospv1 ** 3) /
-                                 (2 * lw**2 * sinpv1**4))
-                        t.append(zeta(i, 1, 2) * zeta(j, 2, 1) * v2xw[s[0] % 3] *
-                                 (v2j + v2j * cospv2 ** 2 + 3 * wj * cospv2 + wj * cospv2 ** 3) /
-                                 (2 * lw**2 * sinpv2**4))
-
-                    t.append((1 - ab) * (zeta(i, 0, 1) * zeta(j, 1, 2) + zeta(i, 2, 1) * zeta(j, 1, 0)) *
-                             (j - i) * (-1/2) ** abs(j - i) * (w[k] * cospv1 - v1[k]) / (l1 * lw * sinpv1))
-                    t.append((1 - ab) * (zeta(i, 3, 1) * zeta(j, 1, 2) + zeta(i, 2, 1) * zeta(j, 1, 0)) *
-                             (j - i) * (-1/2) ** abs(j - i) * (w[k] * cospv2 - v2[k]) / (l2 * lw * sinpv2))
-
-                    val = sum(t)
-                    mat[ii, jj] = val
-                    mat[jj, ii] = val
-        return phi, mat
+        else:
+            return phi
 
     def as_dict(self):
         dihedral_dict = {"@module": self.__class__.__module__,
@@ -517,7 +469,7 @@ class InternalCoords(object):
         angles = [Angle.from_dict(a) for a in d["angles"]]
         dihedrals = [Dihedral.from_dict(dd) for dd in d["dihedrals"]]
         fragments = d["fragments"]
-        coords = bonds + angles + linear_angles + dihedrals
+        coords = bonds + angles + dihedrals
         return cls(coords, fragments)
 
     def __repr__(self):
@@ -591,9 +543,9 @@ class InternalCoords(object):
 
     def B_matrix(self, geom):
         geom = geom.supercell()
-        B = np.zeros((len(self), len(geom), 3), dtype=float)
+        B = np.zeros((len(self), len(geom), 3))
         for i, coord in enumerate(self):
-            _, grads = coord.eval_grad(geom.coords)
+            _, grads = coord.eval(geom.coords, grad=True)
             idx = [k % len(geom) for k in coord.idx]
             for j, grad in zip(idx, grads):
                 B[i, j] += grad
@@ -601,10 +553,10 @@ class InternalCoords(object):
 
     def K_matrix(self, geom, grad):
         geom = geom.supercell()
-        K = np.zeros((len(geom) * 3, len(geom) * 3), dtype=float)
+        K = np.zeros((len(geom) * 3, len(geom) * 3))
 
         for ii, coord in enumerate(self):
-            _, mat = coord.eval_second_deriv(geom.coords)
+            _, mat = coord.eval(geom.coords, second=True)
             idx = [k % len(geom) for k in coord.idx]
             for kk, row in enumerate(mat):
                 for ll, val in enumerate(row):
