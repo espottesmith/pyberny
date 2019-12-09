@@ -246,7 +246,7 @@ class Dihedral(InternalCoord):
     def center(self, ijk):
         return np.round(ijk[[self.j, self.k]].sum(0))
 
-    def eval(self, coords, grad=False, second=False):
+    def eval(self, coords):
         v1 = (coords[self.i] - coords[self.j]) * angstrom
         v2 = (coords[self.l] - coords[self.k]) * angstrom
         w = (coords[self.k] - coords[self.j]) * angstrom

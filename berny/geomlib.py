@@ -71,15 +71,17 @@ class Geometry(object):
         :param float unit: value to multiple atomic coordinates with
         """
         species = list()
+        coords = list()
 
         ghost_coords = list()
         for sp, coord in atoms:
             if sp.upper() == "X":
+                ghost_coords.append(np.array(coord, dtype=float) * unit0)
+            else:
+                species.append(sp)
+                coords.append(np.array(coord, dtype=float) * unit)
 
-
-        species = [sp for sp, _ in atoms]
-        coords = [np.array(coord, dtype=float)*unit for _, coord in atoms]
-        return cls(species, coords, lattice)
+        return cls(species, coords, ghost_coords=ghost_coords, lattice=lattice)
 
     def __repr__(self):
         s = repr(self.formula)
