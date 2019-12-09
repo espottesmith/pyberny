@@ -50,13 +50,14 @@ class Bond(InternalCoord):
     def hessian(self, rho):
         return 0.45*rho[self.i, self.j]
 
-    def weight(self, rho, coords):
+    def weight(self, rho, geom):
         return rho[self.i, self.j]
 
     def center(self, ijk):
         return np.round(ijk[[self.i, self.j]].sum(0))
 
-    def eval(self, coords, grad=False, second=False):
+    def eval(self, geom, grad=False, second=False):
+        coords = geom.coords
         v = (coords[self.i] - coords[self.j]) * angstrom
         r = norm(v)
         if grad:
@@ -110,8 +111,9 @@ class Angle(InternalCoord):
     def hessian(self, rho):
         return 0.15 * (rho[self.i, self.j] * rho[self.j, self.k])
 
-    def weight(self, rho, coords):
+    def weight(self, rho, geom):
         f = 0.12
+        coords = geom.coords
         return np.sqrt(rho[self.i, self.j] * rho[self.j, self.k]) * (
                 f + (1 - f) * np.sin(self.eval(coords))
         )
@@ -119,7 +121,8 @@ class Angle(InternalCoord):
     def center(self, ijk):
         return np.round(2 * ijk[self.j])
 
-    def eval(self, coords, grad=False, second=False):
+    def eval(self, geom, grad=False, second=False):
+        coords = geom.coords
         v1 = (coords[self.i] - coords[self.j]) * angstrom
         v2 = (coords[self.k] - coords[self.j]) * angstrom
         dot_product = np.dot(v1, v2) / (norm(v1)*norm(v2))
@@ -199,6 +202,22 @@ class Angle(InternalCoord):
         return angle
 
 
+class LinearAngle(Angle):
+    def __init__(self, i, j, k, part, angle=None, C=None, **kwargs):
+        if i > k:
+            i, j, k = k, j, i
+        self.i = i
+        self.j = j
+        self.k = k
+        self.part = part
+        self.angle = angle
+        self.idx = i, j, k
+        Angle.__init__(self, **kwargs)
+
+    def eval(self, geom, grad=False, second=False):
+        pass
+
+
 class Dihedral(InternalCoord):
     def __init__(self, i, j, k, l, weak=0, angles=None, C=None, **kwargs):
         if j > k:
@@ -227,7 +246,8 @@ class Dihedral(InternalCoord):
     def center(self, ijk):
         return np.round(ijk[[self.j, self.k]].sum(0))
 
-    def eval(self, coords, grad=False, second=False):
+    def eval(self, geom, grad=False, second=False):
+        coords = geom.coords
         v1 = (coords[self.i] - coords[self.j]) * angstrom
         v2 = (coords[self.l] - coords[self.k]) * angstrom
         w = (coords[self.k] - coords[self.j]) * angstrom
@@ -407,8 +427,10 @@ class InternalCoords(object):
         for j in range(len(geom)):
             for i, k in combinations(np.flatnonzero(bondmatrix[j, :]), 2):
                 ang = Angle(i, j, k, C=C)
-                if ang.eval(geom.coords) > pi/4:
+                if pi/20 < ang.eval(geom.coords) < 19*pi/20:
                     coords.append(ang)
+                else:
+                    add_linear_angles(geom, ang)
         if dihedral:
             for bond in bonds:
                 cls.extend(coords,
@@ -590,6 +612,10 @@ class InternalCoords(object):
         log(msg.format(i+1))
         log('* RMS(dcart): {:.3}, RMS(dq): {:.3}'.format(dcart_rms, dq_rms))
         return q, geom
+
+
+def add_linear_angles(geom, angle):
+    pass
 
 
 def get_dihedrals(center, coords, bondmatrix, C, superweak=False):
