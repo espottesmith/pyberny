@@ -29,7 +29,7 @@ defaults = {
     'stepmax': 1.8e-3,
     'steprms': 1.2e-3,
     'trust': 0.3,
-    'min_trust': 1e-6,
+    'min_trust': 1.0e-8,
     'fail_low_trust': False,
     'dihedral': True,
     'superweakdih': False,
@@ -378,7 +378,9 @@ def quadratic_step_min(g, H, trust, log=no_log):
     return dq, dE, on_sphere
 
 
-def quadratic_step_ts(g, H, trust, log=no_log, epsilon_1=1e-4, epsilon_2=1e-5):
+def quadratic_step_ts(g, H, trust, log=no_log,
+                      epsilon_1=1.0e-4,
+                      epsilon_2=1.0e-5):
     D, V = eigh((H+H.T)/2)
     F = V.dot(g)
 
