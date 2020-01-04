@@ -24,7 +24,7 @@ def muller_brown(x, y, *args, **kwargs):
 
 
 def pes_1_schlegel(x, y, *args, **kwargs):
-    # Doesn't work; typo
+    # Doesn't work; typo?
     a = [1.7, 1.7, 0.8, 0.8, -1, -1, -0.25, -0.25, -0.5]
     b = [1.5, 1.5, 4, 4, 14, 1, 4, 4, 4]
     c = [4, 4, 4, 4, 4, 4, 4, 4, 4]
@@ -101,22 +101,18 @@ def h_surface(x, y, *args, **kwargs):
 
 
 def halgren_lipscomb(x, y, *args, **kwargs):
-    # Need to test
     return ((x - y) ** 2 - (5/3)**2) ** 2 + 4 * (x * y - 4) ** 2 + x - y
 
 
 def cerjan_miller(x, y, *args, **kwargs):
-    # Need to test
     return (1 - y ** 2) * x ** 2 * np.exp(-x**2) + 0.5 * y ** 2
 
 
 def adams(x, y, *args, **kwargs):
-    # Need to test
     return 2 * x ** 2 * (4 - x) + y ** 2 * (4 + y) - x * y * (6 - 17 * np.exp(-0.25 * (x ** 2 + y ** 2)))
 
 
 def hoffman_noff_ruedenberg(x, y, *args, **kwargs):
-    # Need to test
     return (x * y ** 2 - y * x ** 2 + x **2 + 2 * y - 3) / 2
 
 
@@ -152,6 +148,12 @@ def serpentine(x, y, *args, **kwargs):
     return np.arctan(-1 / (np.exp(y) * 1 / np.tan(x / 2 - np.pi / 4))) - 2 * np.exp((y - np.sin(x)) ** 2 / -2)
 
 
+def whirlpool(x, y, *args, **kwargs):
+    r = np.sqrt(x ** 2 + y ** 2)
+    sig = np.arcsin(-2/5)
+    return 1/2 * (1 - x / r * np.cos(np.log(r) + sig) - y / r * np.sin(np.log(r) + sig)) + 1/2 * np.log(r)
+
+
 def slot(x, y, *args, **kwargs):
     return 2 / (np.exp(4 * x) + 1) - 0.2 * x - np.exp(-1 * (4 - x) * (y - 0.2 * (1 - x) * np.sin(2 * x)) ** 2)
 
@@ -170,5 +172,28 @@ def visualize_surface(f, xmin=-1, xmax=1, ymin=-1, ymax=1):
     ax.set_xlabel('x')
     ax.set_ylabel('y')
     ax.set_zlabel('E')
+
+    plt.show()
+
+
+def visualize_trajectory(f, trajectory, xmin=-1, xmax=1, ymin=-1, ymax=1):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    x = np.linspace(xmin, xmax, 100)
+    y = np.linspace(ymin, ymax, 100)
+
+    xs, ys = np.meshgrid(x, y)
+    zs = f(xs, ys)
+
+    ax.plot_surface(xs, ys, zs, cmap='rainbow')
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('E')
+
+    t_xs = np.array([t[0] for t in trajectory])
+    t_ys = np.array([t[1] for t in trajectory])
+    t_zs = np.array([t[2] for t in trajectory])
+    ax.plot(t_xs, t_ys, t_zs, c='k')
 
     plt.show()
