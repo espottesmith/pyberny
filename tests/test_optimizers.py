@@ -21,3 +21,17 @@ def optimize2D(optimizer, solver, trajectory=None):
             energy, gradients = solver.send((list(geom), geom.lattice))
             optimizer.send((energy, gradients))
     """
+
+    if trajectory:
+        trajectory = open(trajectory, 'w')
+    try:
+        next(solver)
+        for geom in optimizer:
+            energy, gradients = solver.send(list(geom))
+            if trajectory:
+                geom.dump(trajectory, 'xyz')
+            optimizer.send((energy, gradients))
+    finally:
+        if trajectory:
+            trajectory.close()
+    return geom

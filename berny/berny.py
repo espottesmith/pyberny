@@ -231,6 +231,10 @@ class Berny(Generator):
                 raise TrustRadiusException("The trust radius got too small, check forces?")
             else:
                 s.trust = s.params["min_trust"]
+
+        # For TS, need to make sure that the shift (1000 here) produces an H
+        # with the appropriate number of negative eigenvalues (1)
+        # Not sure how best to do that...
         proj = dot(B, B_inv)
         H_proj = proj.dot(s.H).dot(proj) + 1000 * (eye(len(s.coords)) - proj)
 
