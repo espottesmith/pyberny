@@ -125,8 +125,7 @@ class Berny2D(Generator):
         if restart:
             vars(s).update(restart)
             return
-        for line in str(s.coords).split('\n'):
-            self._log(line)
+        self._log(geom)
 
     def __next__(self):
         assert self._n <= self._maxsteps
@@ -152,6 +151,7 @@ class Berny2D(Generator):
         log('Energy: {:.12}'.format(energy), level=1)
 
         current = Point(s.future.q, energy, gradients)
+        print("Current", current)
 
         if not s.first:
             if self.transition_state:
@@ -202,6 +202,7 @@ class Berny2D(Generator):
             Math.rms(dq), max(abs(dq))
         ))
         q = s.predicted.q
+        s.geom = q
         s.future = Point(q, None, None)
         s.previous = current
         if s.first or current.E < s.best.E:

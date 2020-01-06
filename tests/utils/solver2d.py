@@ -15,16 +15,16 @@ def Solver2D(f, *args, **kwargs):
     geom = yield
 
     while True:
-        energy = f(geom, *args, **kwargs)
         coords = np.array([c for c in geom])
+        energy = f(coords[0], coords[1], *args, **kwargs)
         gradients = np.zeros(coords.shape)
 
         x, y = sympy.symbols('x y')
         vars = [x, y]
-        funct = f(x, y)
+        funct = f(x, y, sym=True)
 
-        for var in enumerate(vars):
+        for e, var in enumerate(vars):
             grad = funct.diff(var)
-            gradients.append(grad.subs([(x, coords[0]), (y, coords[1])]))
+            gradients[e] = grad.subs([(x, coords[0]), (y, coords[1])])
 
         geom = yield energy, gradients
