@@ -148,7 +148,7 @@ class Berny2D(Generator):
         s = self._state
         energy, gradients = energy_gradients
         gradients = np.array(gradients)
-        log('Energy: {:.12}'.format(energy), level=1)
+        log('Energy: {:.12f}'.format(energy), level=1)
 
         current = Point(s.future.q, energy, gradients)
         print("Current", current)

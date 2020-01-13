@@ -193,7 +193,7 @@ class Berny(Generator):
         s = self._state
         energy, gradients = energy_gradients
         gradients = np.array(gradients)
-        log('Energy: {:.12}'.format(energy), level=1)
+        log('Energy: {:.12f}'.format(energy), level=1)
         B = s.coords.B_matrix(s.geom)
         B_inv = B.T.dot(Math.pinv(np.dot(B, B.T), log=log))
         current = Point(
@@ -248,7 +248,7 @@ class Berny(Generator):
             )
         s.predicted = Point(s.interpolated.q + dq, s.interpolated.E + dE, None)
         dq = s.predicted.q - current.q
-        log('Total step: RMS: {:.3}, max: {:.3}'.format(
+        log('Total step: RMS: {:.3f}, max: {:.3f}'.format(
             Math.rms(dq), max(abs(dq))
         ))
         q, s.geom = s.coords.update_geom(
@@ -292,7 +292,7 @@ def update_hessian_min(H, dq, dg, log=no_log):
     dH2 = H.dot(dq[None, :] * dq[:, None]).dot(H) / dq.dot(H).dot(dq)
     dH = dH1 - dH2
     log('Hessian update information:')
-    log('* Change: RMS: {:.3}, max: {:.3}'.format(Math.rms(dH), abs(dH).max()))
+    log('* Change: RMS: {:.3f}, max: {:.3f}'.format(Math.rms(dH), abs(dH).max()))
     return H + dH
 
 
@@ -311,7 +311,7 @@ def update_hessian_ts(H, dq, dg, log=no_log):
 
     dH = phi * dH_SR1 + (1 - phi) * dH_PSB
     log('Hessian update information:')
-    log('* Change: RMS {:.3}, max {:.3}'.format(Math.rms(dH), abs(dH).max()))
+    log('* Change: RMS {:.3f}, max {:.3f}'.format(Math.rms(dH), abs(dH).max()))
     return H + dH
 
 
@@ -320,7 +320,7 @@ def update_trust(trust, dE, dE_predicted, dq, log=no_log):
         r = dE/dE_predicted  # Fletcher's parameter
     else:
         r = 1.0
-    log("Trust update: Fletcher's parameter: {:.3}".format(r))
+    log("Trust update: Fletcher's parameter: {:.3f}".format(r))
     if r < 0.25:
         return norm(dq) / 4
     elif r > 0.75 and abs(norm(dq) - trust) < 1e-10:
@@ -331,8 +331,8 @@ def update_trust(trust, dE, dE_predicted, dq, log=no_log):
 
 def linear_search(E0, E1, g0, g1, log=no_log):
     log('Linear interpolation:')
-    log('* Energies: {:.8}, {:.8}'.format(E0, E1))
-    log('* Derivatives: {:.3}, {:.3}'.format(g0, g1))
+    log('* Energies: {:.8f}, {:.8f}'.format(E0, E1))
+    log('* Derivatives: {:.3f}, {:.3f}'.format(g0, g1))
     t, E = Math.fit_quartic(E0, E1, g0, g1)
     if t is None or t < -1 or t > 2:
         t, E = Math.fit_cubic(E0, E1, g0, g1)
@@ -348,8 +348,8 @@ def linear_search(E0, E1, g0, g1, log=no_log):
             msg = 'Cubic interpolation was performed'
     else:
         msg = 'Quartic interpolation was performed'
-    log('* {}: t = {:.3}'.format(msg, t))
-    log('* Interpolated energy: {:.8}'.format(E))
+    log('* {}: t = {:.3f}'.format(msg, t))
+    log('* Interpolated energy: {:.8f}'.format(E))
     return t, E
 
 
@@ -373,12 +373,12 @@ def quadratic_step_min(g, H, trust, log=no_log):
         on_sphere = True
         log('Minimization on sphere was performed:')
     dE = dot(g, dq) + 0.5 * dq.dot(H).dot(dq)  # predicted energy change
-    log('* Trust radius: {:.2}'.format(trust))
+    log('* Trust radius: {:.2f}'.format(trust))
     log('* Number of negative eigenvalues: {}'.format((ev < 0).sum()))
-    log('* Lowest eigenvalue: {:.3}'.format(ev[0]))
-    log('* lambda: {:.3}'.format(l))
-    log('Quadratic step: RMS: {:.3}, max: {:.3}'.format(Math.rms(dq), max(abs(dq))))
-    log('* Predicted energy change: {:.3}'.format(dE))
+    log('* Lowest eigenvalue: {:.3f}'.format(ev[0]))
+    log('* lambda: {:.3f}'.format(l))
+    log('Quadratic step: RMS: {:.3f}, max: {:.3f}'.format(Math.rms(dq), max(abs(dq))))
+    log('* Predicted energy change: {:.3f}'.format(dE))
     return dq, dE, on_sphere
 
 
@@ -441,13 +441,13 @@ def quadratic_step_ts(g, H, trust, log=no_log,
         if not converged:
             log('NOTE: Step size did not converge in 100 steps.')
     dE = dot(g, dq)+0.5*dq.dot(H).dot(dq)  # predicted energy change
-    log('* Trust radius: {:.2}'.format(trust))
+    log('* Trust radius: {:.2f}'.format(trust))
     log('* Number of negative eigenvalues: {}'.format((D < 0).sum()))
-    log('* Lowest eigenvalue: {:.3}'.format(D[0]))
-    log('* Maximumation lambda: {:.3}'.format(lp))
-    log('* Minimization lambda: {:.3}'.format(ln))
-    log('Quadratic step: RMS: {:.3}, max: {:.3}'.format(Math.rms(dq), max(abs(dq))))
-    log('* Predicted energy change: {:.3}'.format(dE))
+    log('* Lowest eigenvalue: {:.3f}'.format(D[0]))
+    log('* Maximumation lambda: {:.3f}'.format(lp))
+    log('* Minimization lambda: {:.3f}'.format(ln))
+    log('Quadratic step: RMS: {:.3f}, max: {:.3f}'.format(Math.rms(dq), max(abs(dq))))
+    log('* Predicted energy change: {:.3f}'.format(dE))
     return dq, dE, on_sphere
 
 
@@ -468,7 +468,7 @@ def is_converged(forces, step, on_sphere, params, log=no_log):
     for crit in criteria:
         if len(crit) > 2:
             result = crit[1] < crit[2]
-            msg = '{:.3} {} {:.3}'.format(crit[1], '<' if result else '>', crit[2])
+            msg = '{:.3f} {} {:.3f}'.format(crit[1], '<' if result else '>', crit[2])
         else:
             msg, result = crit
         msg = '{}: {}'.format(crit[0], msg) if msg else crit[0]

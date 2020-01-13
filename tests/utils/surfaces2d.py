@@ -76,7 +76,7 @@ def i_surface(x, y, sym=False):
         else:
             return 0.02 * np.exp(-(x ** 2 + y ** 2))
 
-    return letter_surface(v11, v22, v12, x, y)
+    return letter_surface(v11, v22, v12, x, y, sym=sym)
 
 
 def v_surface(x, y, sym=False):
@@ -98,7 +98,7 @@ def v_surface(x, y, sym=False):
         else:
             return 0.05 * np.exp(-0.4 * ((x - 0.2) ** 2 + (y - 0.8) ** 2))
 
-    return letter_surface(v11, v22, v12, x, y)
+    return letter_surface(v11, v22, v12, x, y, sym=sym)
 
 
 def t_surface(x, y, sym=False):
@@ -120,7 +120,7 @@ def t_surface(x, y, sym=False):
         else:
             return 0.02 * np.exp(-0.8 * (x ** 2 + (y - 1.5) ** 2))
 
-    return letter_surface(v11, v22, v12, x, y)
+    return letter_surface(v11, v22, v12, x, y, sym=sym)
 
 
 def h_surface(x, y, sym=False):
@@ -142,7 +142,7 @@ def h_surface(x, y, sym=False):
         else:
             return 0.046 * np.exp(-0.5 * (x ** 2 + y ** 2))
 
-    return letter_surface(v11, v22, v12, x, y)
+    return letter_surface(v11, v22, v12, x, y, sym=sym)
 
 
 def halgren_lipscomb(x, y, sym=False):
@@ -171,7 +171,7 @@ def quapp_wolfe_schlegel(x, y, sym=False):
     return x ** 4 + y ** 4 - 2 * x ** 2 - 4 * y ** 2 + x * y + 0.3 * x + 0.1 * y
 
 
-def culot_drive_nguyen_ghuysen(x, y, sym=False):
+def culot_dive_nguyen_ghuysen(x, y, sym=False):
     return (x ** 2 + y - 11) ** 2 + (x + y ** 2 - 7) ** 2
 
 
@@ -263,4 +263,4 @@ def visualize_trajectory(f, trajectory, xmin=-1, xmax=1, ymin=-1, ymax=1):
     plt.show()
 
 
-# visualize_surface(muller_brown)
+visualize_surface(quapp_wolfe_schlegel, xmin=-2, xmax=2, ymin=-2, ymax=2)
