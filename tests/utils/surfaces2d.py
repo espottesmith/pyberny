@@ -263,4 +263,5 @@ def visualize_trajectory(f, trajectory, xmin=-1, xmax=1, ymin=-1, ymax=1):
     plt.show()
 
 
-visualize_surface(quapp_wolfe_schlegel, xmin=-2, xmax=2, ymin=-2, ymax=2)
+# visualize_surface(quapp_wolfe_schlegel, xmin=-2, xmax=2, ymin=-2, ymax=2)
+# visualize_surface(h_surface, xmin=-4, xmax=4, ymin=-2, ymax=2)

@@ -18,5 +18,5 @@ def test_cycle_dihedrals():
     12 H -7.440059622286 1.597667062287 0.565115038647
     13 H -6.475526400773 -0.638572472561 2.500357106648
     """.strip().split('\n'))], unit=1/angstrom)
-    coords = InternalCoords(geom)
+    coords = InternalCoords.from_geometry(geom)
     assert not [dih for dih in coords.dihedrals if len(set(dih.idx)) < 4]

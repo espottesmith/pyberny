@@ -151,7 +151,7 @@ class Berny2D(Generator):
         log('Energy: {:.12f}'.format(energy), level=1)
 
         current = Point(s.future.q, energy, gradients)
-        print("Current", current)
+        # print("Current", current)
 
         if not s.first:
             if self.transition_state:
