@@ -6,15 +6,15 @@ import sys
 import time
 
 import numpy as np
-from numpy.linalg import LinAlgError
-from numpy import dot, eye
+from numpy import matmul
 from numpy.linalg import norm
-from scipy.linalg import eigh
+from numpy import dot
 
-from berny.berny import (defaults, Point, update_hessian_min, update_hessian_ts,
-                         update_trust, linear_search, quadratic_step_min,
-                         quadratic_step_ts, is_converged, TrustRadiusException,
-                         NoRootException)
+from berny.berny import (defaults, Point, update_hessian_bfgs, update_hessian_sr1,
+                         update_hessian_psb, update_hessian_sr2,
+                         update_hessian_ts, update_trust, linear_search,
+                         quadratic_step_min, quadratic_step_ts, is_converged,
+                         TrustRadiusException)
 from berny.Logger import Logger
 from berny import Math
 
@@ -159,9 +159,22 @@ class Berny2D(Generator):
                     s.H, current.q-s.best.q, current.g-s.best.g, log=log
                 )
             else:
-                s.H = update_hessian_min(
-                    s.H, current.q - s.best.q, current.g - s.best.g, log=log
-                )
+                dq = current.q-s.best.q
+                dg = current.g-s.best.g
+                quad_err = dg - s.H.dot(dq)
+
+                # Flowchart update, a la Birkholz & Schlegel (2016)
+                if dot(quad_err, dq)/(norm(quad_err) * norm(dq)) < -0.1:
+                    s.H = update_hessian_sr1(s.H, dq, dg, log=log)
+                elif dot(dg, dq)/(norm(dg) * norm(dq)) > 0.1:
+                    s.H = update_hessian_bfgs(s.H, dq, dg, log=log)
+                else:
+                    # In the case of M = I, PSB and SSB are equivalent
+                    M = np.array([[1, 0], [0, 1]])
+                    v = matmul(M, current.q - s.best.q)
+                    s.H = update_hessian_sr2(
+                        s.H, current.q - s.best.q, current.g - s.best.g, v, log=log
+                    )
             s.trust = update_trust(s.trust,
                                    current.E - s.previous.E,
                                    s.predicted.E - s.interpolated.E,

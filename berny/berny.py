@@ -7,7 +7,7 @@ import time
 
 import numpy as np
 from numpy.linalg import LinAlgError
-from numpy import dot, eye
+from numpy import dot, eye, matmul
 from numpy.linalg import norm
 from scipy.linalg import eigh
 
@@ -205,9 +205,23 @@ class Berny(Generator):
                     s.H, current.q-s.best.q, current.g-s.best.g, log=log
                 )
             else:
-                s.H = update_hessian_min(
-                    s.H, current.q - s.best.q, current.g - s.best.g, log=log
-                )
+                dq = current.q-s.best.q
+                dg = current.g-s.best.g
+                quad_err = dg - s.H.dot(dq)
+
+                # Flowchart update, a la Birkholz & Schlegel (2016)
+                if dot(quad_err, dq)/(norm(quad_err) * norm(dq)) < -0.1:
+                    s.H = update_hessian_sr1(s.H, dq, dg, log=log)
+                elif dot(dg, dq)/(norm(dg) * norm(dq)) > 0.1:
+                    s.H = update_hessian_bfgs(s.H, dq, dg, log=log)
+                else:
+                    # Should we use PSB or SSB (SR2) here?
+                    # Current implementation is SSB
+                    M = s.coords.hessian_guess(s.geom)
+                    v = matmul(M, current.q - s.best.q)
+                    s.H = update_hessian_sr2(
+                        s.H, current.q - s.best.q, current.g - s.best.g, v, log=log
+                    )
             s.trust = update_trust(s.trust,
                                    current.E - s.previous.E,
                                    s.predicted.E - s.interpolated.E,
@@ -287,11 +301,49 @@ class Berny(Generator):
         return Generator.throw(self, *args, **kwargs)
 
 
-def update_hessian_min(H, dq, dg, log=no_log):
+def update_hessian_bfgs(H, dq, dg, log=no_log):
     dH1 = dg[None, :] * dg[:, None] / dot(dq, dg)
     dH2 = H.dot(dq[None, :] * dq[:, None]).dot(H) / dq.dot(H).dot(dq)
     dH = dH1 - dH2
     log('Hessian update information:')
+    log('Method: BFGS')
+    log('* Change: RMS: {:.3f}, max: {:.3f}'.format(Math.rms(dH), abs(dH).max()))
+    return H + dH
+
+# y: dg[None, :]
+# yT: dg[:, None]
+
+def update_hessian_sr1(H, dq, dg, log=no_log):
+    quad_err = dg - H.dot(dq)
+    dH = (quad_err[None, :] * quad_err[:, None]) / dot(dq, quad_err)
+    log('Hessian update information:')
+    log('Method: SR1')
+    log('* Change: RMS: {:.3f}, max: {:.3f}'.format(Math.rms(dH), abs(dH).max()))
+
+    return H + dH
+
+
+def update_hessian_psb(H, dq, dg, log=no_log):
+    quad_err = dg - H.dot(dq)
+    qtq = dot(dq, dq)
+
+    dH = ((dq[None, :] * quad_err[:, None]) + (quad_err[None, :] * dq[:, None])) / qtq - \
+         dot(dq, quad_err) * (dq[None, :] * dq[:, None]) / qtq ** 2
+    log('Hessian update information:')
+    log('Method: PSB')
+    log('* Change: RMS: {:.3f}, max: {:.3f}'.format(Math.rms(dH), abs(dH).max()))
+
+    return H + dH
+
+
+def update_hessian_sr2(H, dq, dg, v, log=no_log):
+    quad_err = dg - H.dot(dq)
+    vtq = dot(v, dq)
+
+    dH = ((v[None, :] * quad_err[:, None]) + (quad_err[None, :] * v[:, None])) / vtq - \
+         dot(dq, quad_err) * (v[None, :] * v[:, None]) / vtq ** 2
+    log('Hessian update information:')
+    log('Method: SR2')
     log('* Change: RMS: {:.3f}, max: {:.3f}'.format(Math.rms(dH), abs(dH).max()))
     return H + dH
 
@@ -311,6 +363,7 @@ def update_hessian_ts(H, dq, dg, log=no_log):
 
     dH = phi * dH_SR1 + (1 - phi) * dH_PSB
     log('Hessian update information:')
+    log('Method: Bofill (SR1 + PSB), phi = {:.3f}'.format(phi))
     log('* Change: RMS {:.3f}, max {:.3f}'.format(Math.rms(dH), abs(dH).max()))
     return H + dH
 

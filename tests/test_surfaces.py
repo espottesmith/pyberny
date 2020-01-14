@@ -109,3 +109,6 @@ def test_random_points():
 
             for element in gradients:
                 assert abs(element) < 0.45e-3
+
+
+setup_trajectories()
