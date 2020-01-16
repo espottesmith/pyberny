@@ -29,8 +29,8 @@ defaults = {
     'stepmax': 1.8e-3,
     'steprms': 1.2e-3,
     'trust': 0.3,
-    'min_trust': 1.0e-8,
-    'fail_low_trust': False,
+    'min_trust': 1.0e-9,
+    'fail_low_trust': True,
     'dihedral': True,
     'superweakdih': False,
 }
@@ -227,17 +227,17 @@ class Berny(Generator):
                                    s.predicted.E - s.interpolated.E,
                                    s.predicted.q - s.interpolated.q,
                                    log=log)
-            if self.transition_state:
-                s.interpolated = current
-            else:
-                dq = s.best.q-current.q
-                t, E = linear_search(
-                    current.E, s.best.E, dot(current.g, dq), dot(s.best.g, dq),
-                    log=log
-                )
-                s.interpolated = Point(
-                    current.q + t * dq, E, t * s.best.g + (1 - t) * current.g
-                )
+            # if self.transition_state:
+            s.interpolated = current
+            # else:
+                # dq = s.best.q-current.q
+                # t, E = linear_search(
+                #     current.E, s.best.E, dot(current.g, dq), dot(s.best.g, dq),
+                #     log=log
+                # )
+                # s.interpolated = Point(
+                #     current.q + t * dq, E, t * s.best.g + (1 - t) * current.g
+                # )
         else:
             s.interpolated = current
         if s.trust < s.params["min_trust"]:

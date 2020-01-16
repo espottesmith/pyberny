@@ -68,6 +68,17 @@ def optimize_from_point(funct, point, prefix, setup=True):
     return relaxed
 
 
+def ts_optimize_from_point(funct, point, prefix, setup=True):
+    initial_point = np.array(point)
+
+    if setup:
+        relaxed = optimize2D(Berny2D(initial_point, debug=True, transition_state=True, trust=0.03), Solver2D(funct), trajectory="trajectories/{}_{}_{}".format(prefix, point[0], point[1]))
+    else:
+        relaxed = optimize2D(Berny2D(initial_point, debug=True, transition_state=True, trust=0.03), Solver2D(funct))
+
+    return relaxed
+
+
 def setup_trajectories():
     for fstring, params in preset_points.items():
         for point in params["points"]:
@@ -109,6 +120,3 @@ def test_random_points():
 
             for element in gradients:
                 assert abs(element) < 0.45e-3
-
-
-setup_trajectories()
